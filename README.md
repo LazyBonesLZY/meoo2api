@@ -128,6 +128,37 @@ systemctl --user start meoo2api
 - 探活会真实请求上游 `/models`，鉴权失败标记 `invalid` 并进入硬冷却
 - 没有可用 key 时返回 `503 no_available_key`；BYOK 请求不占池
 
+## 账号模型（重要）
+
+同一个"人"在 Meoo 侧有三个互不相等的标识，号池必须分清：
+
+| 身份 | 形态 | 能干什么 | 能否自证账号 |
+|---|---|---|---|
+| 个人 AK | `meoo_ak_…`（48 字符） | `/open/v1/*` 开放接口、CLI | ✅ `/open/v1/cli-compat/account/identity` |
+| 项目服务 AK | `meoo_project_…`（87 字符） | `/meoo-ai` 模型网关，**进池的就是它** | ❌ 只能被调用，查不到账号 |
+| 网页登录态 | Cookie | `/api/v1/*`、`/api/mc/*`、签到、建 AK | ✅ `/api/v1/user/me` |
+
+`/account/points` 返回的 `account.userId` 是**计费账户 id**，又是另一套编号（实测两个账号分别为
+`1455987876734664` 和 `1932193098442650`），不要和 `user_id` 混用。
+
+控制台的处理：
+
+- 签到记录会写入识别出的账号（`user_id` + 名称/手机号脱敏）
+- 项目服务 AK 无法自证账号，只有通过「登录态开项目」创建时才自动绑定
+- 账号不一致时，每日签到页顶部会提示：**积分只归登录态账号，模型调用仍走池内账号**
+
+### 从登录态自动开 Key / 开项目
+
+每日签到行上的三个按钮：
+
+| 按钮 | 实际调用 | 结果 |
+|---|---|---|
+| 识别 | `GET /api/v1/user/me` | 写入账号 `user_id` / 昵称 / 手机号 |
+| 建 AK | `POST /api/v1/user/api-keys`（13 个 scope） | 生成 `meoo_ak_…`，可调 Open API，**不能进模型池** |
+| 开项目 | 建项目 → `POST /{id}/cloud` → `GET /{id}/cloud/environment` | 产出 `meoo_project_…`，自动入池并绑定账号；**占 1 个云服务额度** |
+
+「开项目」需要二次确认，会产生真实资源（PostgreSQL/Auth/Storage）。
+
 ## 每日签到
 
 Meoo 的每日登录积分（`daily_login`）不是 AK 能拿的：网页端打开时调用

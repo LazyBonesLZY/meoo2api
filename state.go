@@ -39,6 +39,7 @@ type Key struct {
 	Health        Health   `json:"health"`
 	Stats         KeyStats `json:"stats"`
 	CooldownUntil int64    `json:"cooldownUntil"`
+	Account       *Account `json:"account,omitempty"`
 }
 
 type ClientKey struct {
@@ -72,6 +73,7 @@ type Checkin struct {
 	TotalGranted  int64        `json:"totalGranted"`
 	GrantCount    int64        `json:"grantCount"`
 	Last          *CheckinLast `json:"last"`
+	Account       *Account     `json:"account,omitempty"`
 }
 
 type Config struct {
@@ -117,16 +119,17 @@ type Bucket struct {
 }
 
 type State struct {
-	Version    int                 `json:"version"`
-	Config     Config              `json:"config"`
-	Keys       []*Key              `json:"keys"`
-	ClientKeys []*ClientKey        `json:"clientKeys"`
-	Checkins   []*Checkin          `json:"checkins"`
-	Logs       []*LogRow           `json:"logs"`
-	Usage      map[string]*Bucket  `json:"usage"`
-	mu         sync.RWMutex
-	dir        string
-	dirty      chan struct{}
+	Version      int                `json:"version"`
+	Config       Config             `json:"config"`
+	Keys         []*Key             `json:"keys"`
+	ClientKeys   []*ClientKey       `json:"clientKeys"`
+	Checkins     []*Checkin         `json:"checkins"`
+	PersonalKeys []*PersonalKey     `json:"personalKeys"`
+	Logs         []*LogRow          `json:"logs"`
+	Usage        map[string]*Bucket `json:"usage"`
+	mu           sync.RWMutex
+	dir          string
+	dirty        chan struct{}
 }
 
 func randID(prefix string, n int) string {
@@ -142,17 +145,17 @@ func shaHex(s string) string {
 
 func DefaultAliases() map[string]string {
 	return map[string]string{
-		"deepseek v4.1 flash":  "deepseek-v4.1-flash-1017",
-		"deepseek-v4.1-flash":  "deepseek-v4.1-flash-1017",
-		"deepseek-v4-1-flash":  "deepseek-v4.1-flash-1017",
-		"deepseek-flash":       "deepseek-v4.1-flash-1017",
-		"deepseek v4 flash":    "deepseek-v4-flash-0731",
-		"deepseek-v4-flash":    "deepseek-v4-flash-0731",
-		"deepseek v4 pro":      "deepseek-v4-pro-0813",
-		"deepseek-v4-pro":      "deepseek-v4-pro-0813",
-		"qwen":                 "qwen3.8-flash",
-		"qwen-max":             "qwen3.8-max",
-		"glm":                  "glm-5.2",
+		"deepseek v4.1 flash": "deepseek-v4.1-flash-1017",
+		"deepseek-v4.1-flash": "deepseek-v4.1-flash-1017",
+		"deepseek-v4-1-flash": "deepseek-v4.1-flash-1017",
+		"deepseek-flash":      "deepseek-v4.1-flash-1017",
+		"deepseek v4 flash":   "deepseek-v4-flash-0731",
+		"deepseek-v4-flash":   "deepseek-v4-flash-0731",
+		"deepseek v4 pro":     "deepseek-v4-pro-0813",
+		"deepseek-v4-pro":     "deepseek-v4-pro-0813",
+		"qwen":                "qwen3.8-flash",
+		"qwen-max":            "qwen3.8-max",
+		"glm":                 "glm-5.2",
 	}
 }
 
@@ -171,11 +174,12 @@ func defaultState() *State {
 			AdminUser:        "admin",
 			CheckinIntervalH: 6,
 		},
-		Keys:       []*Key{},
-		ClientKeys: []*ClientKey{},
-		Checkins:   []*Checkin{},
-		Logs:       []*LogRow{},
-		Usage:      map[string]*Bucket{},
+		Keys:         []*Key{},
+		ClientKeys:   []*ClientKey{},
+		Checkins:     []*Checkin{},
+		PersonalKeys: []*PersonalKey{},
+		Logs:         []*LogRow{},
+		Usage:        map[string]*Bucket{},
 	}
 }
 

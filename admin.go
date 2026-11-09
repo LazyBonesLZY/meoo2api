@@ -113,8 +113,8 @@ func (s *State) AdminRoute(w http.ResponseWriter, r *http.Request, path string, 
 			keys = append(keys, map[string]any{
 				"id": k.ID, "label": k.Label, "key": kv, "enabled": k.Enabled, "weight": k.Weight,
 				"note": k.Note, "createdAt": k.CreatedAt, "health": k.Health, "stats": k.Stats,
-				"cooldownUntil": k.CooldownUntil,
-				"cooling":       max64(0, (k.CooldownUntil-now)/1000),
+				"cooldownUntil": k.CooldownUntil, "account": k.Account,
+				"cooling": max64(0, (k.CooldownUntil-now)/1000),
 			})
 		}
 		cks := []map[string]any{}
@@ -138,6 +138,7 @@ func (s *State) AdminRoute(w http.ResponseWriter, r *http.Request, path string, 
 				"id": c.ID, "label": c.Label, "cookie": ck, "enabled": c.Enabled,
 				"createdAt": c.CreatedAt, "lastGrantDate": c.LastGrantDate,
 				"totalGranted": c.TotalGranted, "grantCount": c.GrantCount, "last": c.Last,
+				"account": c.Account,
 			})
 		}
 		cfg := map[string]any{
@@ -149,9 +150,21 @@ func (s *State) AdminRoute(w http.ResponseWriter, r *http.Request, path string, 
 			"checkinIntervalH": s.Config.CheckinIntervalH,
 		}
 		s.mu.RUnlock()
+		pks := []map[string]any{}
+		for _, p := range s.PersonalKeys {
+			kv := Mask(p.Key)
+			if reveal {
+				kv = p.Key
+			}
+			pks = append(pks, map[string]any{
+				"id": p.ID, "accountId": p.AccountID, "name": p.Name, "key": kv,
+				"scopes": p.Scopes, "createdAt": p.CreatedAt,
+			})
+		}
 		writeJSON(w, 200, map[string]any{
 			"config": cfg, "keys": keys, "clientKeys": cks, "checkins": cis,
-			"models": NativeModels, "alerts": s.Alerts(), "uptime": time.Since(startedAt).Seconds(),
+			"personalKeys": pks,
+			"models":       NativeModels, "alerts": s.Alerts(), "uptime": time.Since(startedAt).Seconds(),
 		})
 		return true
 
@@ -217,6 +230,14 @@ func (s *State) AdminRoute(w http.ResponseWriter, r *http.Request, path string, 
 			writeJSON(w, 200, h)
 		case sub == "/reveal":
 			writeJSON(w, 200, map[string]any{"key": k.Key})
+		case sub == "/identify" && r.Method == http.MethodPost:
+			acc, err := s.IdentifyKey(k)
+			if err != nil {
+				writeJSON(w, 400, map[string]any{"error": err.Error()})
+			} else {
+				_ = s.Save()
+				writeJSON(w, 200, map[string]any{"account": acc})
+			}
 		case r.Method == http.MethodPatch:
 			var in map[string]any
 			_ = readJSON(r, &in)
@@ -387,6 +408,59 @@ func (s *State) AdminRoute(w http.ResponseWriter, r *http.Request, path string, 
 		switch {
 		case sub == "/run" && r.Method == http.MethodPost:
 			writeJSON(w, 200, RunCheckin(s, c))
+		case sub == "/identify" && r.Method == http.MethodPost:
+			acc, err := s.IdentifyCheckin(c)
+			if err != nil {
+				writeJSON(w, 400, map[string]any{"error": err.Error()})
+			} else {
+				_ = s.Save()
+				writeJSON(w, 200, map[string]any{"account": acc})
+			}
+		case sub == "/create-key" && r.Method == http.MethodPost:
+			pk, err := s.CreatePersonalKey(c)
+			if err != nil {
+				writeJSON(w, 400, map[string]any{"error": err.Error()})
+			} else {
+				writeJSON(w, 200, map[string]any{
+					"id": pk.ID, "key": pk.Key, "scopes": pk.Scopes,
+					"note": "个人 AK：可调 CLI / Open API，但不能进模型池",
+				})
+			}
+		case sub == "/provision" && r.Method == http.MethodPost:
+			var in struct {
+				Confirm     bool   `json:"confirm"`
+				ProjectName string `json:"projectName"`
+				PersonalAK  string `json:"personalAK"`
+			}
+			_ = readJSON(r, &in)
+			if !in.Confirm {
+				writeJSON(w, 400, map[string]any{"error": "需要 confirm=true：会在该账号下新建项目并开通云服务（占用云服务额度）"})
+				break
+			}
+			ak := in.PersonalAK
+			if ak == "" {
+				s.mu.RLock()
+				for _, p := range s.PersonalKeys {
+					if p.AccountID == "" || (c.Account != nil && p.AccountID == c.Account.ID) {
+						ak = p.Key
+					}
+				}
+				s.mu.RUnlock()
+			}
+			if ak == "" {
+				writeJSON(w, 400, map[string]any{"error": "没有可用的个人 AK，先点「创建 API Key」"})
+				break
+			}
+			name := in.ProjectName
+			if name == "" {
+				name = "meoo2api-pool"
+			}
+			out, err := s.ProvisionProject(ak, name, c.Account)
+			if err != nil {
+				writeJSON(w, 400, map[string]any{"error": err.Error()})
+			} else {
+				writeJSON(w, 200, out)
+			}
 		case sub == "/reveal":
 			writeJSON(w, 200, map[string]any{"cookie": c.Cookie})
 		case r.Method == http.MethodPatch:

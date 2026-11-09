@@ -145,7 +145,7 @@ details summary{cursor:pointer;color:var(--dim);font-size:11.5px}
           <span class="muted">只需粘一把 meoo_project_…，添加后自动探活</span>
         </div>
         <div class="panel" style="padding:0;overflow:auto">
-          <table><thead><tr><th>备注</th><th>key</th><th>健康</th><th>权重</th><th>请求 / 失败</th><th>tokens</th><th>最近使用</th><th>操作</th></tr></thead>
+          <table><thead><tr><th>备注</th><th>key</th><th>账号</th><th>健康</th><th>权重</th><th>请求 / 失败</th><th>tokens</th><th>最近使用</th><th>操作</th></tr></thead>
           <tbody id="keysBody"></tbody></table>
         </div>
       </section>
@@ -212,9 +212,15 @@ details summary{cursor:pointer;color:var(--dim);font-size:11.5px}
           <label class="chk"><input type="checkbox" id="autoCi"> 自动签到（每 <input id="ciInterval" type="number" value="6" style="width:52px"> 小时）</label>
           <span class="muted" id="ciStat"></span>
         </div>
+        <div id="accWarn"></div>
         <div class="panel" style="padding:0;overflow:auto">
-          <table><thead><tr><th>备注</th><th>登录态</th><th>今日</th><th>累计积分</th><th>最近结果</th><th>操作</th></tr></thead>
+          <table><thead><tr><th>备注</th><th>账号</th><th>登录态</th><th>今日</th><th>累计积分</th><th>最近结果</th><th>操作</th></tr></thead>
           <tbody id="ciBody"></tbody></table>
+        </div>
+        <div class="panel">
+          <div class="head"><b>登录态创建的 API Key</b><span class="muted">个人 AK，可调 CLI / Open API，不能进模型池</span></div>
+          <div style="overflow:auto"><table><thead><tr><th>账号</th><th>key</th><th>scopes</th><th>创建时间</th><th></th></tr></thead>
+          <tbody id="pkBody"></tbody></table></div>
         </div>
         <div class="panel">
           <div class="muted" style="line-height:1.8">
@@ -477,6 +483,7 @@ function renderKeys(){
   tb.innerHTML=SNAP.keys.map(k=>`<tr data-id="${k.id}">
     <td><input value="${esc(k.label)}" data-f="label" style="width:110px;padding:3px 6px"></td>
     <td class="mono">${esc(k.key)}</td>
+    <td>${k.account?`<span title="${esc(k.account.id)}">${esc(k.account.name)}</span>`:'<span class="muted">未识别</span>'}</td>
     <td>${healthBadge(k)}</td>
     <td><input type="number" min="1" max="5" value="${k.weight}" data-f="weight" style="width:56px;padding:3px 5px"></td>
     <td class="mono">${k.stats.req} / ${k.stats.fail}</td>
@@ -484,6 +491,7 @@ function renderKeys(){
     <td class="mono">${k.stats.lastUsed?new Date(k.stats.lastUsed).toLocaleTimeString('zh-CN',{hour12:false}):'—'}</td>
     <td>
       <button class="btn sm" data-act="probe">探活</button>
+      <button class="btn sm" data-act="identify">识别</button>
       <button class="btn sm" data-act="toggle">${k.enabled?'停用':'启用'}</button>
       <button class="btn sm" data-act="reset">解冷却</button>
       <button class="btn sm danger" data-act="del">删除</button>
@@ -493,6 +501,8 @@ function renderKeys(){
     try{
       if(act==='probe'){const h=await admin(`/admin/api/keys/${id}/probe`,{method:'POST'});
         b.textContent=h.state==='ok'?'正常':'失败'; setTimeout(()=>refresh(),400); return;}
+      if(act==='identify'){const r=await admin(`/admin/api/keys/${id}/identify`,{method:'POST'});
+        alert('账号: '+(r.account?.name||'')+'\nID: '+(r.account?.id||''));await refresh();return;}
       if(act==='toggle'){const k=SNAP.keys.find(x=>x.id===id);await admin(`/admin/api/keys/${id}`,{method:'PATCH',body:JSON.stringify({enabled:!k.enabled})});}
       if(act==='reset'){await admin(`/admin/api/keys/${id}`,{method:'PATCH',body:JSON.stringify({resetCooldown:true})});}
       if(act==='del'){if(!confirm('删除这个 key？'))return;await admin(`/admin/api/keys/${id}`,{method:'DELETE'});}
@@ -577,12 +587,16 @@ function renderCheckins(){
       ? `<span class="muted"> ${last.skipReason==='ALREADY_GRANTED_TODAY'?'今日已领':esc(last.skipReason)}</span>` : '';
     return `<tr data-id="${c.id}">
       <td><input value="${esc(c.label)}" data-f="label" style="width:110px;padding:3px 6px"></td>
+      <td>${c.account?`<span title="${esc(c.account.id)}">${esc(c.account.name)}</span>`:'<span class="muted">未识别</span>'}</td>
       <td class="mono muted">${esc(c.cookie)}</td>
       <td>${todayGranted?'<span class="badge ok">已到账</span>':'<span class="badge warn">待领</span>'}</td>
       <td class="mono">${c.totalGranted||0}<span class="muted"> / ${c.grantCount||0}次</span></td>
       <td>${badge}${skip}${last?`<span class="muted"> ${last.ms}ms</span>`:''}</td>
       <td>
         <button class="btn sm" data-act="run">签到</button>
+        <button class="btn sm" data-act="identify">识别</button>
+        <button class="btn sm" data-act="createkey">建 AK</button>
+        <button class="btn sm" data-act="provision">开项目</button>
         <button class="btn sm" data-act="toggle">${c.enabled?'停用':'启用'}</button>
         <button class="btn sm danger" data-act="del">删除</button>
       </td></tr>`;
@@ -597,6 +611,20 @@ function renderCheckins(){
         if(!r.ok)alert('失败：'+(r.error||''));
         else alert(r.granted?`签到成功 +${r.amount} 积分`:'今日已领过，接口未再发放');
         await refresh();return;}
+      if(act==='identify'){const r=await admin(`/admin/api/checkins/${id}/identify`,{method:'POST'});
+        alert('账号: '+(r.account?.name||'')+'\nID: '+(r.account?.id||''));await refresh();return;}
+      if(act==='createkey'){
+        if(!confirm('在该账号下创建一个个人 API Key？\n（可调 CLI/Open API，但不能进模型池）'))return;
+        const r=await admin(`/admin/api/checkins/${id}/create-key`,{method:'POST'});
+        navigator.clipboard?.writeText(r.key);
+        alert('已创建并复制：\n'+r.key+'\n\n'+r.note);await refresh();return;}
+      if(act==='provision'){
+        if(!confirm('将在该账号下：\n1) 新建项目\n2) 开通云服务（占用 1 个云服务额度）\n3) 取项目服务 AK 加入模型池\n\n继续？'))return;
+        b.disabled=true;b.textContent='…';
+        try{const r=await admin(`/admin/api/checkins/${id}/provision`,{method:'POST',body:JSON.stringify({confirm:true,projectName:'meoo2api-pool'})});
+          alert(r.ok?('已入池：'+r.key+''):('失败：'+(r.error||JSON.stringify(r))));}
+        finally{b.disabled=false;b.textContent='开项目';}
+        await refresh();return;}
       if(act==='toggle')await admin(`/admin/api/checkins/${id}`,{method:'PATCH',body:JSON.stringify({enabled:!c.enabled})});
       if(act==='del'){if(!confirm('删除该账号？'))return;await admin(`/admin/api/checkins/${id}`,{method:'DELETE'});}
       await refresh();
@@ -605,6 +633,26 @@ function renderCheckins(){
   tb.querySelectorAll('input[data-f=label]').forEach(inp=>inp.onchange=async()=>{
     const id=inp.closest('tr').dataset.id;
     try{await admin(`/admin/api/checkins/${id}`,{method:'PATCH',body:JSON.stringify({label:inp.value})});}catch(e){alert(e.message);}
+  });
+  // 号池账号区分
+  const keyAccs=[...new Set((SNAP.keys||[]).map(k=>k.account?.id).filter(Boolean))];
+  const ciAccs=[...new Set(list.map(c=>c.account?.id).filter(Boolean))];
+  const onlySession=ciAccs.filter(x=>!keyAccs.includes(x));
+  $('#accWarn').innerHTML = onlySession.length
+    ? `<div class="alert warn">● 签到账号 ${onlySession.length} 个不在密钥池中：积分只归该账号，模型调用仍走密钥池账号。<br><span class="muted">登录态账号：${onlySession.map(id=>{const c=list.find(x=>x.account?.id===id);return esc(c?c.account.name:id);}).join('、')}</span></div>`
+    : '';
+  const pks=SNAP.personalKeys||[];
+  $('#pkBody').innerHTML=pks.map(p=>`<tr>
+    <td class="mono muted">${esc(p.accountId||'—')}</td>
+    <td class="mono">${esc(p.key)}</td>
+    <td class="muted">${(p.scopes||[]).length} 项</td>
+    <td class="mono">${new Date(p.createdAt).toLocaleString('zh-CN',{hour12:false})}</td>
+    <td><button class="btn sm" data-pk="${esc(p.id)}">复制</button></td></tr>`).join('')
+    ||'<tr><td colspan="5" class="muted" style="padding:12px">还没有创建过</td></tr>';
+  $('#pkBody').querySelectorAll('button[data-pk]').forEach(b=>b.onclick=async()=>{
+    const r=await admin('/admin/api/state?reveal=1');
+    const p=(r.personalKeys||[]).find(x=>x.id===b.dataset.pk);
+    if(p){navigator.clipboard?.writeText(p.key);alert('已复制：'+p.key);}
   });
   $('#autoCi').checked=!!(SNAP.config.autoCheckin);
   $('#ciInterval').value=SNAP.config.checkinIntervalH||6;
