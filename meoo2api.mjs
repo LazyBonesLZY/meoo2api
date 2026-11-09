@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// meoo2api — Meoo 模型网关的 OpenAI 兼容层
+// meoo2api — Meoo 模型网关的 OpenAI 兼容层 + WebUI
 // 上游: https://api.meoo.host/meoo-ai/compatible-mode/v1 (项目服务 AK)
+// 支持 BYOK: 客户端直接带 meoo_project_… 即用，无需服务端配置
 import { createServer } from 'node:http';
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -25,10 +26,12 @@ const TIMEOUT = Number(process.env.UPSTREAM_TIMEOUT || 180000);
 const MAX_BODY = Number(process.env.MAX_BODY_BYTES || 8 * 1024 * 1024);
 const LOG = process.env.LOG || join(HERE, 'meoo2api.log');
 
-if (!AK) {
-  console.error('缺少 MEOO_PROJECT_AK，例如: MEOO_PROJECT_AK=meoo_project_xxx node meoo2api.mjs');
-  process.exit(1);
+if (!AK && !KEYS.length) {
+  console.warn('未配置 MEOO_PROJECT_AK / MEOO2API_KEYS，仅支持客户端自带项目 AK (BYOK)');
 }
+
+const BYOK_RE = /^meoo_project_[A-Za-z0-9._-]{8,}$/;
+const WEBUI = join(HERE, 'webui.html');
 
 const NATIVE = [
   'qwen3.8-flash', 'qwen3.8-max', 'qwen3.7-max', 'qwen3.7-plus',
@@ -79,12 +82,21 @@ function sendJson(res, status, obj) {
 const oaError = (res, status, message, type = 'invalid_request_error', code, param) =>
   sendJson(res, status, { error: { message, type, ...(param ? { param } : {}), ...(code ? { code } : {}) } });
 
-function clientAuth(req) {
-  if (!KEYS.length) return { ok: true };
+const sameKey = (a, b) => timingSafeEqual(createHash('sha256').update(a).digest(), createHash('sha256').update(b).digest());
+
+// 返回 { key, source } —— key 只在本请求内使用，不落盘、不跨请求复用
+function resolveKey(req) {
   const tok = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
-  if (!tok) return { ok: false, message: '缺少 Authorization 头' };
-  const h = (s) => createHash('sha256').update(s).digest();
-  return KEYS.some((k) => timingSafeEqual(h(k), h(tok))) ? { ok: true } : { ok: false, message: '无效的 API key' };
+  if (!tok) return { error: '缺少 Authorization 头' };
+  if (BYOK_RE.test(tok)) return { key: tok, source: 'client' };
+  if (tok.startsWith('meoo_ak_')) {
+    return { error: '个人 AK 不能调用模型网关，请用项目服务 AK（meoo_project_…）' };
+  }
+  if (KEYS.length && KEYS.some((k) => sameKey(k, tok))) {
+    return AK ? { key: AK, source: 'server' } : { error: '服务端未配置 MEOO_PROJECT_AK' };
+  }
+  if (!KEYS.length && AK) return { key: AK, source: 'server' };
+  return { error: '无效的 API key' };
 }
 
 function readBody(req) {
@@ -114,7 +126,7 @@ class UpstreamError extends Error {
   }
 }
 
-async function callUpstream(path, payload, { stream = false } = {}) {
+async function callUpstream(path, payload, key, { stream = false } = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT);
   let lastErr;
@@ -124,7 +136,7 @@ async function callUpstream(path, payload, { stream = false } = {}) {
         const r = await fetch(`${BASE}${path}`, {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${AK}`,
+            Authorization: `Bearer ${key}`,
             'Content-Type': 'application/json',
             Accept: stream ? 'text/event-stream' : 'application/json',
           },
@@ -181,9 +193,9 @@ function shapeChat(body, overrideModel) {
   return out;
 }
 
-async function chatWithN(payload, n) {
+async function chatWithN(payload, n, key) {
   const results = await Promise.all(
-    Array.from({ length: n }, () => callUpstream('/chat/completions', payload).then((r) => r.json())),
+    Array.from({ length: n }, () => callUpstream('/chat/completions', payload, key).then((r) => r.json())),
   );
   const first = results[0];
   const sum = (k) => results.reduce((a, d) => a + Number(d?.usage?.[k] || 0), 0);
@@ -252,20 +264,36 @@ const server = createServer(async (req, res) => {
     return res.end();
   }
 
-  if (p === '/healthz') {
-    let status = 'unknown';
+  if ((req.method === 'GET' || req.method === 'HEAD') && (p === '/' || p === '/webui.html' || p === '/index.html')) {
     try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 8000);
-      const r = await fetch(`${BASE}/models`, { headers: { Authorization: `Bearer ${AK}` }, signal: ctrl.signal });
-      clearTimeout(t);
-      status = `http ${r.status}`;
-    } catch (e) { status = `error: ${e.message}`; }
-    return sendJson(res, 200, { ok: true, upstream: BASE, upstreamStatus: status, keysRequired: KEYS.length > 0 });
+      const html = readFileSync(WEBUI, 'utf8');
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      return res.end(html);
+    } catch {
+      return sendJson(res, 500, { error: { message: 'webui.html 缺失', type: 'api_error' } });
+    }
   }
 
-  const auth = clientAuth(req);
-  if (!auth.ok) return oaError(res, 401, auth.message, 'authentication_error', 'invalid_api_key');
+  if (p === '/healthz') {
+    let status = AK ? 'unknown' : 'skipped(no-server-key)';
+    if (AK) {
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 8000);
+        const r = await fetch(`${BASE}/models`, { headers: { Authorization: `Bearer ${AK}` }, signal: ctrl.signal });
+        clearTimeout(t);
+        status = `http ${r.status}`;
+      } catch (e) { status = `error: ${e.message}`; }
+    }
+    return sendJson(res, 200, {
+      ok: true, upstream: BASE, upstreamStatus: status,
+      byok: true, serverKey: Boolean(AK), keysRequired: KEYS.length > 0,
+    });
+  }
+
+  const auth = resolveKey(req);
+  if (auth.error) return oaError(res, 401, auth.error, 'authentication_error', 'invalid_api_key');
+  const key = auth.key;
 
   if (req.method === 'GET' && (p === '/v1/models' || p === '/models')) {
     return sendJson(res, 200, {
@@ -298,13 +326,13 @@ const server = createServer(async (req, res) => {
         return oaError(res, 400, 'n>1 不支持 stream=true', 'invalid_request_error', 'invalid_parameter_error', 'n');
       }
       try {
-        const merged = await chatWithN(payload, n);
+        const merged = await chatWithN(payload, n, key);
         merged.model ||= payload.model;
         return sendJson(res, 200, merged);
       } catch (e) { return oaError(res, e.status || 502, e.message, e.type, e.code); }
     }
     let r;
-    try { r = await callUpstream('/chat/completions', payload, { stream: payload.stream === true }); }
+    try { r = await callUpstream('/chat/completions', payload, key, { stream: payload.stream === true }); }
     catch (e) { return oaError(res, e.status || 502, e.message, e.type, e.code); }
     if (payload.stream === true) return pipeSse(res, r, payload.model);
     const data = await r.json();
@@ -329,7 +357,7 @@ const server = createServer(async (req, res) => {
     const n = Math.max(1, Math.min(Number(body.n) || 1, 4));
     let data;
     try {
-      data = n > 1 ? await chatWithN(payload, n) : await (await callUpstream('/chat/completions', payload)).json();
+      data = n > 1 ? await chatWithN(payload, n, key) : await (await callUpstream('/chat/completions', payload, key)).json();
     } catch (e) { return oaError(res, e.status || 502, e.message, e.type, e.code); }
     return sendJson(res, 200, {
       id: data.id || `cmpl-${randomUUID()}`,
@@ -359,7 +387,7 @@ const server = createServer(async (req, res) => {
     if (typeof body.instructions === 'string') messages.unshift({ role: 'system', content: body.instructions });
     const payload = shapeChat({ model: body.model, messages, max_tokens: body.max_output_tokens });
     let data;
-    try { data = await (await callUpstream('/chat/completions', payload)).json(); }
+    try { data = await (await callUpstream('/chat/completions', payload, key)).json(); }
     catch (e) { return oaError(res, e.status || 502, e.message, e.type, e.code); }
     const text = data.choices?.[0]?.message?.content ?? '';
     return sendJson(res, 200, {
@@ -392,7 +420,8 @@ const server = createServer(async (req, res) => {
 server.listen(PORT, BIND, () => {
   console.log(`meoo2api  http://${BIND}:${PORT}/v1`);
   console.log(`  upstream ${BASE}`);
-  console.log(`  auth     ${KEYS.length ? `${KEYS.length} key(s)` : 'open'}`);
+  console.log(`  auth     BYOK${KEYS.length ? ` + ${KEYS.length} 客户端 key` : ''}${AK ? ' + 服务端 AK' : ''}`);
+  console.log(`  webui    http://${BIND}:${PORT}/`);
   console.log(`  log      ${LOG}`);
 });
 
