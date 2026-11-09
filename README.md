@@ -6,11 +6,22 @@ Meoo 模型网关的 OpenAI 兼容 API + 账号控制台。Go 单二进制。
 OpenAI 客户端 → http://host:8791/v1 → https://api.meoo.host/meoo-ai/compatible-mode/v1
 ```
 
-## 概念只有一个：账号
+## 两个列表
+
+| 列表 | 是什么 | 用在哪 |
+|---|---|---|
+| **账号管理** | Meoo 账号：登录态 + 它名下的项目 API Key + 积分余额 | 上游：决定请求打到哪个 Meoo 账号 |
+| **API Key** | meoo2api 自己签发的 key（`sk-…`） | 调用方拿它访问本服务，后端自动选可用账号 |
+
+调用方用 API Key；也支持直接带账号的项目 AK（BYOK），两者都行。
+
+## 账号
 
 一个账号 = 一份网页登录态 + 一个项目 API Key（`meoo_project_…`）。这个 API Key 就是调用 `meoo2api` 的凭证，也是号池条目。
 
 - 添加账号（粘贴浏览器 Cookie）后自动执行：识别账号 → 建个人 AK → 建项目 → 开云服务 → 取项目 API Key → 入池
+- 账号列表显示：项目 API Key、健康/冷却、积分余额、今日是否已签到
+- 冷却可手动「解除冷却」；「刷新积分」用该账号的个人 AK 查 `/account/points`
 - 个人 AK（`meoo_ak_…`）只能调 Open API，调模型网关会被拒（`401 SERVICE_AK_FORMAT_INVALID`），所以不放进池
 - 无需客户端 key、无需额外分组：直接 `Authorization: Bearer meoo_project_…`
 

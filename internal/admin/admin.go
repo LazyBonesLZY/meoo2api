@@ -117,6 +117,10 @@ func (h *Handler) route(w http.ResponseWriter, r *http.Request, path string) {
 		h.accountRoute(w, r, strings.TrimPrefix(path, "/admin/api/accounts/"))
 	case path == "/admin/api/accounts-checkin-all" && r.Method == http.MethodPost:
 		write(w, 200, map[string]any{"results": checkin.RunAll(h.St, true)})
+	case path == "/admin/api/api-keys":
+		h.apiKeysRoot(w, r)
+	case strings.HasPrefix(path, "/admin/api/api-keys/"):
+		h.apiKeyRoute(w, r, strings.TrimPrefix(path, "/admin/api/api-keys/"))
 	case path == "/admin/api/config" && r.Method == http.MethodPatch:
 		h.configRoute(w, r)
 	case path == "/admin/api/logs" && r.Method == http.MethodGet:
@@ -139,7 +143,7 @@ func (h *Handler) state(w http.ResponseWriter) {
 			"id": a.ID, "userId": a.UserID, "name": a.Name, "cookie": maskCookie(a.Cookie),
 			"enabled": a.Enabled, "expired": a.Expired, "pingOk": a.PingOK, "lastPing": a.LastPing,
 			"lastGrantDate": a.LastGrantDate, "totalGranted": a.TotalGranted, "grantCount": a.GrantCount,
-			"last": a.Last, "createdAt": a.CreatedAt,
+			"last": a.Last, "createdAt": a.CreatedAt, "points": a.Points, "pointsAt": a.PointsAt,
 		}
 		if k := findKey(h.St.Data.Keys, a.KeyID); k != nil {
 			acc["key"] = map[string]any{
@@ -160,10 +164,16 @@ func (h *Handler) state(w http.ResponseWriter) {
 			"latencyMs": k.Health.LatencyMs, "cooldown": max64(0, (k.CooldownUntil-now)/1000),
 		})
 	}
+	aks := []map[string]any{}
+	for _, c := range h.St.Data.ClientKeys {
+		kv := model.Mask(c.Key)
+		aks = append(aks, map[string]any{"id": c.ID, "key": kv, "enabled": c.Enabled,
+			"createdAt": c.CreatedAt, "stats": c.Stats})
+	}
 	cfg := h.St.Data.Config
 	cfg.AdminPass = ""
 	body := map[string]any{
-		"config": cfg, "accounts": out, "orphanKeys": orphans, "models": model.NativeModels,
+		"config": cfg, "accounts": out, "orphanKeys": orphans, "apiKeys": aks, "models": model.NativeModels,
 		"alerts": h.St.AlertsLocked(), "lastAutoRun": h.St.Data.LastAutoRun,
 		"uptime": time.Since(h.Start).Seconds(),
 	}
@@ -241,6 +251,22 @@ func (h *Handler) accountRoute(w http.ResponseWriter, r *http.Request, rest stri
 		write(w, 200, map[string]any{"ok": ok, "error": msg, "lastPing": a.LastPing})
 	case sub == "/checkin" && r.Method == http.MethodPost:
 		write(w, 200, checkin.Run(h.St, a))
+	case sub == "/points" && r.Method == http.MethodPost:
+		v, err := h.Acc.Points(a)
+		if err != nil {
+			write(w, 400, map[string]any{"error": err.Error()})
+			return
+		}
+		_ = h.St.Save()
+		write(w, 200, map[string]any{"points": v})
+	case sub == "/reset-cooldown" && r.Method == http.MethodPost:
+		h.St.Mu.Lock()
+		if k := findKey(h.St.Data.Keys, a.KeyID); k != nil {
+			k.CooldownUntil = 0
+		}
+		h.St.Mu.Unlock()
+		_ = h.St.Save()
+		write(w, 200, map[string]any{"ok": true})
 	case sub == "/probe" && r.Method == http.MethodPost:
 		h.St.Mu.RLock()
 		k := findKey(h.St.Data.Keys, a.KeyID)
@@ -306,6 +332,75 @@ func (h *Handler) accountRoute(w http.ResponseWriter, r *http.Request, rest stri
 			}
 			h.St.Data.Keys = keys
 		}
+		h.St.Mu.Unlock()
+		_ = h.St.Save()
+		write(w, 200, map[string]any{"ok": true})
+	default:
+		write(w, 404, map[string]any{"error": "unknown"})
+	}
+}
+
+func (h *Handler) apiKeysRoot(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		h.St.Mu.RLock()
+		list := []map[string]any{}
+		for _, c := range h.St.Data.ClientKeys {
+			list = append(list, map[string]any{"id": c.ID, "key": model.Mask(c.Key), "enabled": c.Enabled,
+				"createdAt": c.CreatedAt, "stats": c.Stats})
+		}
+		h.St.Mu.RUnlock()
+		write(w, 200, map[string]any{"apiKeys": list})
+		return
+	}
+	c := store.NewClientKey("", "")
+	h.St.Mu.Lock()
+	h.St.Data.ClientKeys = append(h.St.Data.ClientKeys, c)
+	h.St.Mu.Unlock()
+	_ = h.St.Save()
+	write(w, 200, map[string]any{"id": c.ID, "key": c.Key})
+}
+
+func (h *Handler) apiKeyRoute(w http.ResponseWriter, r *http.Request, rest string) {
+	parts := strings.SplitN(rest, "/", 2)
+	id := parts[0]
+	sub := ""
+	if len(parts) > 1 {
+		sub = "/" + parts[1]
+	}
+	var c *model.ClientKey
+	h.St.Mu.RLock()
+	for _, x := range h.St.Data.ClientKeys {
+		if x.ID == id {
+			c = x
+		}
+	}
+	h.St.Mu.RUnlock()
+	if c == nil {
+		write(w, 404, map[string]any{"error": "not found"})
+		return
+	}
+	switch {
+	case sub == "/reveal":
+		write(w, 200, map[string]any{"key": c.Key})
+	case r.Method == http.MethodPatch:
+		var in map[string]any
+		readBody(r, &in)
+		h.St.Mu.Lock()
+		if v, ok := in["enabled"].(bool); ok {
+			c.Enabled = v
+		}
+		h.St.Mu.Unlock()
+		_ = h.St.Save()
+		write(w, 200, map[string]any{"ok": true})
+	case r.Method == http.MethodDelete:
+		h.St.Mu.Lock()
+		out := h.St.Data.ClientKeys[:0]
+		for _, x := range h.St.Data.ClientKeys {
+			if x.ID != id {
+				out = append(out, x)
+			}
+		}
+		h.St.Data.ClientKeys = out
 		h.St.Mu.Unlock()
 		_ = h.St.Save()
 		write(w, 200, map[string]any{"ok": true})
@@ -406,6 +501,12 @@ func (h *Handler) usageRoute(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) exportRoute(w http.ResponseWriter) {
 	h.St.Mu.RLock()
+	aks := []map[string]any{}
+	for _, c := range h.St.Data.ClientKeys {
+		kv := model.Mask(c.Key)
+		aks = append(aks, map[string]any{"id": c.ID, "key": kv, "enabled": c.Enabled,
+			"createdAt": c.CreatedAt, "stats": c.Stats})
+	}
 	cfg := h.St.Data.Config
 	cfg.AdminPass = ""
 	acs := []map[string]any{}

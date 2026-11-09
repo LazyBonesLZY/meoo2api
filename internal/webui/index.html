@@ -65,6 +65,7 @@ pre{background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding
     <div class="brand"><span class="dot"></span>meoo2api</div>
     <button class="on" data-view="overview"><span>▦</span>概览</button>
     <button data-view="accounts"><span>☺</span>账号管理</button>
+    <button data-view="apikeys"><span>⚿</span>API Key</button>
     <button data-view="logs"><span>≡</span>请求日志</button>
     <button data-view="settings"><span>⚒</span>设置</button>
     <div class="foot"><div id="fUp">—</div><div id="fAcc">—</div></div>
@@ -114,8 +115,22 @@ pre{background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding
           <span class="muted" id="accStat"></span>
         </div>
         <div class="panel" style="padding:0;overflow:auto">
-          <table><thead><tr><th>账号</th><th>API Key</th><th>状态</th><th>签到</th><th>操作</th></tr></thead>
+          <table><thead><tr><th>账号</th><th>API Key</th><th>状态</th><th>积分</th><th>签到</th><th>操作</th></tr></thead>
           <tbody id="accBody"></tbody></table>
+        </div>
+      </section>
+
+      <!-- API Key -->
+      <section class="view" id="v-apikeys">
+        <h2>API Key</h2>
+        <div class="sub">调用 meoo2api 用的 key，由本服务签发；请求会落在可用账号的项目 Key 上</div>
+        <div class="row">
+          <button class="btn primary" id="newApiKey">+ 生成 API Key</button>
+          <span class="muted" id="akStat"></span>
+        </div>
+        <div class="panel" style="padding:0;overflow:auto">
+          <table><thead><tr><th>API Key</th><th>状态</th><th>请求</th><th>创建时间</th><th>操作</th></tr></thead>
+          <tbody id="akBody"></tbody></table>
         </div>
       </section>
 
@@ -210,6 +225,7 @@ $$('.nav button[data-view]').forEach(b=>b.onclick=()=>{
   $$('.nav button[data-view]').forEach(x=>x.classList.toggle('on',x===b));
   $$('.view').forEach(v=>v.classList.toggle('on',v.id==='v-'+b.dataset.view));
   if(b.dataset.view==='logs')loadLogs();
+  if(b.dataset.view==='apikeys')renderApiKeys();
 });
 document.documentElement.dataset.theme=localStorage.getItem('m2a_theme')||'dark';
 $('#theme').onclick=()=>{const t=document.documentElement.dataset.theme==='dark'?'light':'dark';
@@ -228,9 +244,41 @@ async function refresh(){
   if(!TOKEN)return;
   try{
     SNAP=await admin('/admin/api/state');
-    renderAccounts(); fillSettings(); await loadUsage();
+    renderAccounts(); renderApiKeys(); fillSettings(); await loadUsage();
   }catch(e){}
 }
+
+function renderApiKeys(){
+  const list=(SNAP&&SNAP.apiKeys)||[];
+  $('#akBody').innerHTML=list.map(k=>`<tr data-id="${k.id}">
+    <td class="mono">${esc(k.key)}</td>
+    <td>${k.enabled?'<span class="badge ok">启用</span>':'<span class="badge">停用</span>'}</td>
+    <td class="mono">${k.stats?.req||0}</td>
+    <td class="mono">${new Date(k.createdAt).toLocaleString('zh-CN',{hour12:false})}</td>
+    <td>
+      <button class="btn sm" data-ak="copy">复制</button>
+      <button class="btn sm" data-ak="toggle">${k.enabled?'停用':'启用'}</button>
+      <button class="btn sm danger" data-ak="del">删除</button>
+    </td></tr>`).join('')
+    ||'<tr><td colspan="5" class="muted" style="padding:14px">还没有 API Key</td></tr>';
+  $('#akBody').querySelectorAll('button[data-ak]').forEach(b=>b.onclick=async()=>{
+    const id=b.closest('tr').dataset.id, act=b.dataset.ak, k=list.find(x=>x.id===id);
+    try{
+      if(act==='copy'){const r=await admin(`/admin/api/api-keys/${id}/reveal`);navigator.clipboard?.writeText(r.key);alert('已复制：'+r.key);return;}
+      if(act==='toggle')await admin(`/admin/api/api-keys/${id}`,{method:'PATCH',body:JSON.stringify({enabled:!k.enabled})});
+      if(act==='del'){if(!confirm('删除这个 API Key？'))return;await admin(`/admin/api/api-keys/${id}`,{method:'DELETE'});}
+      await refresh();
+    }catch(e){alert(e.message);}
+  });
+  $('#akStat').textContent=`${list.length} 个 · 启用 ${list.filter(k=>k.enabled).length}`;
+}
+$('#newApiKey').onclick=async()=>{
+  try{const r=await admin('/admin/api/api-keys',{method:'POST',body:'{}'});
+    navigator.clipboard?.writeText(r.key);
+    alert('已生成并复制：\n'+r.key);
+    await refresh();
+  }catch(e){alert(e.message);}
+};
 
 function keyBadge(a){
   if(!a.key) return '<span class="badge warn">无 Key</span>';
@@ -254,6 +302,7 @@ function renderAccounts(){
       <td>${a.name?`<div>${esc(a.name)}</div><div class="muted mono">${esc(a.userId||'')}</div>`:'<span class="muted">未识别</span>'}</td>
       <td class="mono">${a.key?esc(a.key.key):'<span class="muted">—</span>'}</td>
       <td>${keyBadge(a)}<div class="muted">${session}</div></td>
+      <td class="mono">${a.points??0}<div class="muted">${a.pointsAt?new Date(a.pointsAt).toLocaleTimeString('zh-CN',{hour12:false}):'—'}</div></td>
       <td>${done?'<span class="badge ok">今日已签</span>':'<span class="badge warn">待签</span>'}
           <div class="muted">累计 ${a.totalGranted||0}</div></td>
       <td>
@@ -261,6 +310,8 @@ function renderAccounts(){
         <button class="btn sm" data-act="probe">探活</button>
         <button class="btn sm" data-act="checkin">签到</button>
         <button class="btn sm" data-act="ping">保活</button>
+        <button class="btn sm" data-act="cooldown">解除冷却</button>
+        <button class="btn sm" data-act="points">刷新积分</button>
         <button class="btn sm danger" data-act="del">删除</button>
       </td></tr>`;
   }).join('') + (SNAP.orphanKeys||[]).map(k=>`<tr data-orphan="${k.id}">
@@ -268,11 +319,12 @@ function renderAccounts(){
       <td class="mono">${esc(k.key)}</td>
       <td>${k.cooldown>0?`<span class="badge warn">冷却 ${k.cooldown}s</span>`:`<span class="badge ${k.health==='ok'?'ok':''}">${k.health==='ok'?'正常 '+(k.latencyMs||0)+'ms':k.health}</span>`}</td>
       <td class="muted">—</td>
+      <td class="muted">—</td>
       <td>
         <button class="btn sm" data-orphan-act="copy">复制 Key</button>
         <button class="btn sm danger" data-orphan-act="del">删除</button>
       </td></tr>`).join('')
-    ||'<tr><td colspan="5" class="muted" style="padding:14px">还没有账号，点「+ 添加账号」</td></tr>';
+    ||'<tr><td colspan="6" class="muted" style="padding:14px">还没有账号，点「+ 添加账号」</td></tr>';
 
   $('#accBody').querySelectorAll('button[data-orphan-act]').forEach(b=>b.onclick=async()=>{
     const tr=b.closest('tr'), id=tr.dataset.orphan, act=b.dataset.orphanAct;
@@ -293,6 +345,8 @@ function renderAccounts(){
         alert(r.state==='ok'?`正常 ${r.latencyMs}ms`:'异常：'+(r.error||r.state));}
       if(act==='checkin'){const r=await admin(`/admin/api/accounts/${id}/checkin`,{method:'POST'});
         alert(r.ok?(r.granted?`签到成功 +${r.amount}`:'今日已领'):('失败：'+(r.error||'')));}
+      if(act==='cooldown'){await admin(`/admin/api/accounts/${id}/reset-cooldown`,{method:'POST'});alert('已解除冷却');}
+      if(act==='points'){const r=await admin(`/admin/api/accounts/${id}/points`,{method:'POST'});alert('积分：'+r.points);}
       if(act==='ping'){const r=await admin(`/admin/api/accounts/${id}/ping`,{method:'POST'});
         alert(r.ok?'会话有效':'失败：'+(r.error||''));}
       if(act==='del'){if(!confirm('删除账号及其 API Key？'))return;await admin(`/admin/api/accounts/${id}`,{method:'DELETE'});}

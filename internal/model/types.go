@@ -87,6 +87,8 @@ type Account struct {
 	PersonalKeyIDs []string     `json:"personalKeyIds"`
 	ProjectKeyIDs  []string     `json:"projectKeyIds"`
 	KeyID          string       `json:"keyId,omitempty"`
+	Points         int64        `json:"points"`
+	PointsAt       int64        `json:"pointsAt"`
 }
 
 type Checkin struct {

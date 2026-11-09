@@ -136,7 +136,40 @@ func (s *Service) Ping(a *model.Account) (bool, error) {
 		}
 		return false, fmt.Errorf("会话已失效 HTTP %d", code)
 	}
+	_, _ = s.Points(a)
 	return true, nil
+}
+
+// Points 用该账号的个人 AK 查积分余额
+func (s *Service) Points(a *model.Account) (int64, error) {
+	ak := s.personalAKOf(a)
+	if ak == "" {
+		return 0, fmt.Errorf("该账号没有个人 AK，无法查询积分")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	code, raw, err := s.Up.DoJSON(ctx, "GET", "https://meoo.com/open/v1/cli-compat/account/points", nil,
+		map[string]string{"Authorization": "Bearer " + ak, "X-Meoo-Client": "cli"})
+	if err != nil {
+		return 0, err
+	}
+	var d struct {
+		Data struct {
+			Account struct {
+				Available int64 `json:"availableBalance"`
+			} `json:"account"`
+		} `json:"data"`
+	}
+	_ = json.Unmarshal(raw, &d)
+	if code != 200 {
+		return 0, fmt.Errorf("查询积分失败 HTTP %d", code)
+	}
+	s.St.Mu.Lock()
+	a.Points = d.Data.Account.Available
+	a.PointsAt = time.Now().UnixMilli()
+	s.St.Mu.Unlock()
+	s.St.Touch()
+	return a.Points, nil
 }
 
 // PersonalKey 在该账号下创建个人 AK（不可进模型池）
@@ -304,6 +337,9 @@ func (s *Service) Add(cookie string) (*model.Account, map[string]any, error) {
 	ok, _ := s.Ping(a)
 	out["session"] = ok
 	out["key"] = s.keyInfo(a)
+	if _, err := s.Points(a); err == nil {
+		out["points"] = a.Points
+	}
 	if a.KeyID != "" {
 		// 已有 API Key，只刷新登录态
 		_ = s.St.Save()

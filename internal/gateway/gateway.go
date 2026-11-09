@@ -41,8 +41,9 @@ func card(id, owner string) map[string]any {
 }
 
 type caller struct {
-	Byok  string
-	Label string
+	Byok      string
+	Label     string
+	ClientKey *model.ClientKey
 }
 
 func (h *Handler) resolveCaller(r *http.Request) (caller, string) {
@@ -56,7 +57,15 @@ func (h *Handler) resolveCaller(r *http.Request) (caller, string) {
 	if strings.HasPrefix(tok, "meoo_ak_") {
 		return caller{}, "个人 AK 不能调用模型网关，请用项目服务 AK（meoo_project_…）"
 	}
-	return caller{}, "无效的 API key：请用账号页里的项目 AK（meoo_project_…）"
+	h.St.Mu.RLock()
+	defer h.St.Mu.RUnlock()
+	for _, c := range h.St.Data.ClientKeys {
+		if c.Enabled && c.Key == tok {
+			lbl := "api-key:" + c.Key[len(c.Key)-4:]
+			return caller{ClientKey: c, Label: lbl}, ""
+		}
+	}
+	return caller{}, "无效的 API key"
 }
 
 func (h *Handler) resolveModel(m string) string {
