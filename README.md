@@ -64,6 +64,7 @@ c.chat.completions.create(model="deepseek v4.1 flash",
 | `UPSTREAM_TIMEOUT` | 上游超时，默认 180000ms |
 | `MAX_BODY_BYTES` | 请求体上限，默认 8MiB |
 | `LOG` | 访问日志路径，默认同目录 `meoo2api.log` |
+| `MEOO2API_ADMIN_PASSWORD` | 管理端密码；不设则首次启动随机生成 |
 
 ## 项目服务 AK
 
@@ -77,20 +78,38 @@ curl -s https://meoo.com/open/v1/cli-compat/projects/<urlId>/cloud/environment \
   -H "Authorization: Bearer meoo_ak_xxx" | jq -r .data.meooProjectApiKey
 ```
 
-## WebUI
+## 控制台
 
-`http://127.0.0.1:8791/` 打开即用，只需要粘一把项目 AK（存 sessionStorage，仅当前标签页）。
-控制台布局：左侧导航 + 顶部状态，暗/亮主题切换。
+`http://127.0.0.1:8791/`，需要管理密码（首次启动随机生成，写入 `data/admin-password.txt`，
+或用 `MEOO2API_ADMIN_PASSWORD` 指定）。左侧导航 + 顶部状态，暗/亮主题。
 
-| 视图 | 作用 |
+| 视图 | 功能 |
 |---|---|
-| 概览 | 上游状态、模型数、延迟，一键连通性测试（拉模型 + 最小对话） |
-| 对话 | 流式/非流式、max_tokens、temperature，reasoning 折叠展示 |
-| 工具调用 | 内置 `get_weather` / `get_time` / `calc`，自动跑 tool_calls → 本地执行 → 回传 → 最终回答，每轮 finish_reason 与原始 JSON 都可见 |
-| 上下文隔离 | 连发两次独立请求，验证第二次不带第一次的内容 |
-| 模型 | 原生 id + 别名表格，一键复制 |
-| 请求日志 | 本页请求记录（浏览器内存）+ 最后一次原始请求/响应 |
-| 设置 | Base URL、鉴权方式、清除本地 key |
+| 概览 | 请求总量、成功率、P95、可用 key、近 24h 柱状图、告警条、一键全部探活 |
+| 密钥池 | 多个项目 AK：备注、权重（1-5）、启用/停用、单个探活、解除冷却、删除；显示健康状态与冷却倒计时 |
+| 访问密钥 | 写给调用方的 key：生成、复制、停用、删除 |
+| 对话 | 流式/非流式、max_tokens、temperature、reasoning 折叠 |
+| 工具调用 | 内置 `get_weather` / `get_time` / `calc`，自动 tool_calls → 本地执行 → 回传 → 最终回答 |
+| 上下文隔离 | 连发两次独立请求，判定是否串味 |
+| 模型 / 别名 | 上游模型清单、隐藏开关、别名增删 |
+| 用量 | 按小时聚合：请求/成功/失败/prompt/completion/P50/P95 |
+| 请求日志 | 服务端记录，按状态、request id、key 备注过滤 |
+| 设置 | 默认 max_tokens、超时、粘性、软/硬冷却、日志上限、管理密码、导出 state |
+
+### key 池行为
+
+- 按权重轮询；开启「粘性」后优先复用上一个 key
+- 上游 429/5xx → 软冷却（默认 60s）；401/403 → 硬冷却（默认 900s）
+- 探活会真实请求上游 `/models`，鉴权失败标记 `invalid` 并进入硬冷却
+- 没有可用 key 时返回 `503 no_available_key`；BYOK 请求不占池
+
+## 运行数据
+
+```
+data/state.json           key 池、客户端 key、别名、配置、日志、用量（600）
+data/admin-password.txt   首次启动生成的管理密码（600）
+meoo2api.log              访问日志 JSONL（不含 body、不含 key 明文）
+```
 
 ## 无状态与隔离
 
