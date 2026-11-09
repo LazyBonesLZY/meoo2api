@@ -105,15 +105,99 @@ docker compose up -d --build             # 或用容器
 
 「开项目」需要二次确认，会产生真实资源（PostgreSQL/Auth/Storage）。
 
+
+## 每日签到
+
+Meoo 的每日登录积分（`daily_login`）不是 AK 能拿的：网页端打开时调用
+`GET /api/mc/entitlement/init`，响应里的 `dailyLoginGranted` / `dailyLoginGrantAmount` 就是当天发放结果。
+用 AK 请求该接口会被 `API_KEY_ROUTE_FORBIDDEN` 挡掉，所以本项目的签到走**网页登录态 Cookie**。
+
+在「每日签到」页粘贴 meoo.com 的 Cookie（F12 → Network → 任意请求的 Cookie 头），即可手动或自动领取。
+Cookie 存在 `data/state.json`（600），接口返回时只显示前 8 位。
+
+### 手机号登录（自动拿 Cookie）
+
+Meoo 登录走阿里云 SSO（`account.aliyun.com/sso/login.htm`，client_id=oneday），
+自己实现短信接口会撞 baxia 反爬，所以用浏览器代登：
+
+```bash
+node login.mjs                                   # 弹窗，手机号登录后自动抓 Cookie
+node login.mjs --headless                        # 复用已登录的 profile，无需人工
+node login.mjs --api http://127.0.0.1:8791 \
+  --password <管理密码> --label 主号              # 抓完直接写入控制台并签到
+```
+
+流程：`/api/auth/login_redirect` 拿到 SSO 地址 → 浏览器授权 → 回跳 `meoo.com/aliyunLogin` 种 Cookie
+→ CDP 读取并请求 `entitlement/init` 验证 → 写入签到账号。
+
+profile 默认 `~/.meoo-login-profile`，登录一次后有效期由阿里云会话决定；
+
+
+
+`dailyLoginGranted=false` + `dailyLoginSkipReason=ALREADY_GRANTED_TODAY` 表示当天已领过，
+余额以 `/open/v1/cli-compat/account/points` 为准。
+
 ### 自动签到与保活
 
-调度在进程内，每 5 分钟检查一轮：
+调度在进程内，每 5 分钟检查一轮，不需要外部 cron：
 
 | 动作 | 频率 | 说明 |
 |---|---|---|
-| 签到 | 每天一次 | 过了 `checkinHour` 且当天未领才请求；返回 `ALREADY_GRANTED_TODAY` 也记当天，不再重试 |
-| 保活 | 每 `keepAliveHours` 小时 | `GET /api/v1/user/me`，维持登录态；失败标记 `expired` |
-| 手动 | 随时 | 「签到」「保活」按钮，或 `POST /admin/api/checkins/{id}/run|ping` |
+| 签到 | 每天一次 | 过了 `checkinHour`（默认 0 点）且当天未领才请求；返回 `ALREADY_GRANTED_TODAY` 也记为当天，不再重试 |
+| 保活 | 每 `keepAliveHours` 小时（默认 6） | `GET /api/v1/user/me` 维持登录态；失败标记 `expired` |
+| 手动 | 随时 | 「签到」「保活」按钮，或 `POST /admin/api/checkins/{id}/run` / `/ping` |
 
-控制台显示：自动签到开关、领取整点、保活间隔、上次自动运行、每个账号的保活时间与是否失效。
+控制台显示：开关、领取整点、保活间隔、上次自动运行、每个账号的保活时间与是否失效。
+会话失效后重跑一次 `login.mjs` 即可恢复。
 
+## 运行数据
+
+```
+data/state.json   key 池、客户端 key、签到账号、别名、配置、日志、用量（600）
+meoo2api.log      访问日志 JSONL（不含 body、不含 key 明文）
+```
+
+管理密码只存哈希，不落盘；首次启动打印一次。
+
+## 无状态与隔离
+
+服务端**不保存任何会话状态**：每个请求的 `messages` 就是全部上下文，请求之间不共享记忆。
+
+- 不写数据库、不写 cookie、不设 session 头；日志只记 method / path / status / 耗时，不记 body、不记 key
+- BYOK 模式下每请求的 key 只在该请求内使用，用完即弃
+- `n>1` 是同一个 payload 并发发起，不引入跨请求状态
+- 实测：第 1 次 `prompt_tokens=73`（含暗号），第 2 次 `prompt_tokens=71`（只有它自己那条），模型回答"不知道"
+
+## 上游差异说明
+
+Meoo 网关是阿里系的 OpenAI 兼容实现，本层补齐了这些地方：
+
+- `/models` 返回 `{"models":[…]}`，已转成标准 `{"object":"list","data":[…]}`。
+- 上游只接受 `n=1`，`n>1` 由本层并发调用合并（不支持 `n>1` + `stream`）。
+- `stream_options` 必须与 `stream:true` 成对出现，本层自动配对或剔除。
+- 不支持 embedding / 语音 / 图像，统一返回 404 `unsupported_endpoint`（上游原生回 500）。
+- thinking 模型（如 `deepseek-v4.1-flash-1017`）的 `max_tokens` 需 ≥600，否则正文为空、全被 reasoning 占用。
+- 思考参数原样透传：`reasoning_effort`（deepseek 系）、`enable_thinking`（qwen 系）；
+  `reasoning_content` 不裁剪，流式与非流式都会带回，控制台可折叠查看。
+
+## 部署
+
+```bash
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o meoo2api .
+cp meoo2api.service.example ~/.config/systemd/user/meoo2api.service
+systemctl --user daemon-reload
+systemctl --user enable --now meoo2api
+systemctl --user status meoo2api
+```
+
+跨架构交叉编译：
+
+```bash
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o meoo2api-arm64 .
+```
+
+服务默认只绑 `127.0.0.1`，跨机访问建议 `ssh -L 8791:127.0.0.1:8791 host`，或自行加反向代理鉴权。
+
+## 许可
+
+MIT
