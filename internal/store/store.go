@@ -106,6 +106,12 @@ func (s *Store) migrate() {
 			}
 		}
 	}
+	// 账号补 KeyID
+	for _, a := range s.Data.Accounts {
+		if a.KeyID == "" && len(a.ProjectKeyIDs) > 0 {
+			a.KeyID = a.ProjectKeyIDs[len(a.ProjectKeyIDs)-1]
+		}
+	}
 	// 池内 key 反查所属账号
 	for _, k := range s.Data.Keys {
 		if k.AccountID != "" {

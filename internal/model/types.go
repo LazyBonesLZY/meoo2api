@@ -86,6 +86,7 @@ type Account struct {
 	Last           *CheckinLast `json:"last,omitempty"`
 	PersonalKeyIDs []string     `json:"personalKeyIds"`
 	ProjectKeyIDs  []string     `json:"projectKeyIds"`
+	KeyID          string       `json:"keyId,omitempty"`
 }
 
 type Checkin struct {

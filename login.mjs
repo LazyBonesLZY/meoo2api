@@ -176,15 +176,9 @@ async function handle(cookie, data) {
   }).then((r) => r.json());
   if (!t.token) { log('管理端登录失败：' + (t.error || '')); return; }
   const auth = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + t.token };
-  const list = await fetch(`${API}/admin/api/accounts`, { headers: auth }).then((r) => r.json());
-  const exist = (list.accounts || []).find((x) => x.label === LABEL);
-  const c = exist
-    ? await fetch(`${API}/admin/api/accounts/${exist.id}`, { method: 'PATCH', headers: auth, body: JSON.stringify({ cookie }) })
-        .then((r) => r.json()).then(() => ({ id: exist.id }))
-    : await fetch(`${API}/admin/api/accounts`, {
-        method: 'POST', headers: auth, body: JSON.stringify({ label: LABEL, cookie }),
-      }).then((r) => r.json());
-  if (!c.id) { log('写入签到账号失败：' + (c.error || '')); return; }
+  const c = await fetch(`${API}/admin/api/accounts`, {
+    method: 'POST', headers: auth, body: JSON.stringify({ cookie }),
+  }).then((r) => r.json());
   const run = await fetch(`${API}/admin/api/accounts/${c.id}/checkin`, { method: 'POST', headers: auth }).then((r) => r.json());
   log(`已写入控制台：${run.ok ? (run.granted ? '签到成功 +' + run.amount : 'Cookie 有效，今日已领') : '签到失败 ' + (run.error || '')}`);
 }

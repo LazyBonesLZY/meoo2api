@@ -5,50 +5,42 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>meoo2api · 控制台</title>
 <style>
-:root{--bg:#0d1117;--bg2:#11161f;--panel:#161b24;--panel2:#1b2230;--line:#242c3a;--fg:#e6edf3;--dim:#8b949e;--acc:#3b82f6;--acc2:#22d3ee;--ok:#3fb950;--warn:#d29922;--bad:#f85149;--r:12px;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-[data-theme=light]{--bg:#f4f6fa;--bg2:#eef1f7;--panel:#fff;--panel2:#f7f9fc;--line:#dde3ec;--fg:#1b2430;--dim:#5b6b7f;--acc:#2563eb;--acc2:#0891b2}
-*{box-sizing:border-box}html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.6 -apple-system,"Segoe UI",Roboto,"Noto Sans SC",sans-serif}
-button,input,select,textarea{font:inherit;color:inherit}
+:root{--bg:#0d1117;--bg2:#11161f;--panel:#161b24;--panel2:#1b2230;--line:#242c3a;--fg:#e6edf3;--dim:#8b949e;--acc:#3b82f6;--ok:#3fb950;--warn:#d29922;--bad:#f85149;--r:12px;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+[data-theme=light]{--bg:#f4f6fa;--bg2:#eef1f7;--panel:#fff;--panel2:#f7f9fc;--line:#dde3ec;--fg:#1b2430;--dim:#5b6b7f;--acc:#2563eb}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.6 -apple-system,"Segoe UI",Roboto,"Noto Sans SC",sans-serif}
+button,input,select{font:inherit;color:inherit}
 code,pre,td.mono{font-family:var(--mono)}
 .shell{display:flex;min-height:100vh}
-.nav{width:200px;flex:0 0 200px;background:var(--bg2);border-right:1px solid var(--line);padding:14px 10px;position:sticky;top:0;height:100vh;overflow:auto}
-.brand{display:flex;align-items:center;gap:9px;padding:4px 8px 12px;font-weight:700}
-.dot{width:9px;height:9px;border-radius:50%;background:var(--acc2);box-shadow:0 0 10px var(--acc2)}
-.nav button{display:flex;gap:9px;align-items:center;width:100%;padding:8px 10px;margin-bottom:2px;border:0;border-radius:9px;background:transparent;color:var(--dim);cursor:pointer;text-align:left;font-size:13.5px}
+.nav{width:196px;flex:0 0 196px;background:var(--bg2);border-right:1px solid var(--line);padding:14px 10px;position:sticky;top:0;height:100vh}
+.brand{display:flex;gap:9px;align-items:center;padding:4px 8px 14px;font-weight:700}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--acc);box-shadow:0 0 9px var(--acc)}
+.nav button{display:flex;gap:9px;align-items:center;width:100%;padding:8px 10px;margin-bottom:2px;border:0;border-radius:9px;background:transparent;color:var(--dim);cursor:pointer;text-align:left}
 .nav button:hover{background:var(--panel);color:var(--fg)}
 .nav button.on{background:var(--panel2);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line)}
-.nav .ico{width:16px;text-align:center;opacity:.85}
-.nav .sep{height:1px;background:var(--line);margin:8px 6px}
-.nav .foot{margin-top:10px;padding:8px;border-top:1px solid var(--line);font-size:11px;color:var(--dim);line-height:1.6;word-break:break-all}
-.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.nav .foot{margin-top:14px;padding:8px;border-top:1px solid var(--line);font-size:11.5px;color:var(--dim);word-break:break-all}
+.main{flex:1;min-width:0}
 .topbar{position:sticky;top:0;z-index:5;display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:11px 20px;background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 .title{font-weight:600;margin-right:auto}
-.pill{padding:3px 9px;border-radius:999px;border:1px solid var(--line);font-size:11.5px;color:var(--dim);white-space:nowrap}
+.pill{padding:3px 9px;border-radius:999px;border:1px solid var(--line);font-size:11.5px;color:var(--dim)}
 .pill.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,var(--line))}
 .pill.bad{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,var(--line))}
-.pill.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
-.views{padding:16px 20px 48px}
-.view{display:none}.view.on{display:block}
-h2{font-size:15px;margin:0 0 3px}.sub{color:var(--dim);font-size:12.5px;margin-bottom:14px}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:11px;margin-bottom:14px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
-.card .k{font-size:11.5px;color:var(--dim);margin-bottom:4px}.card .v{font-size:20px;font-weight:650}
-.card .v small{font-size:12px;font-weight:400;color:var(--dim);margin-left:3px}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:13px 15px;margin-bottom:13px}
-.panel>.head{display:flex;gap:10px;align-items:center;margin-bottom:10px}
-.panel>.head b{font-size:13px}
-.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:9px}.row:last-child{margin-bottom:0}
-.muted{color:var(--dim);font-size:12.5px}
-label.chk{display:inline-flex;gap:6px;align-items:center;color:var(--dim);font-size:12.5px;cursor:pointer}
-input,select,textarea{padding:7px 10px;border-radius:9px;border:1px solid var(--line);background:var(--panel2)}
-textarea{width:100%;min-height:66px;resize:vertical}
 button.btn{padding:6px 11px;border-radius:9px;border:1px solid var(--line);background:var(--panel);cursor:pointer;font-size:13px}
 button.btn:hover{border-color:color-mix(in srgb,var(--acc) 50%,var(--line))}
 button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
 button.danger{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,var(--line))}
 button:disabled{opacity:.45;cursor:not-allowed}
-.sm{padding:3px 8px !important;font-size:11.5px !important}
+.sm{padding:3px 8px!important;font-size:11.5px!important}
+.views{padding:16px 20px 40px}
+.view{display:none}.view.on{display:block}
+h2{font-size:15px;margin:0 0 3px}.sub{color:var(--dim);font-size:12.5px;margin-bottom:14px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:11px;margin-bottom:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
+.card .k{font-size:11.5px;color:var(--dim);margin-bottom:4px}.card .v{font-size:20px;font-weight:650}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:13px 15px;margin-bottom:13px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:9px}.row:last-child{margin-bottom:0}
+.muted{color:var(--dim);font-size:12.5px}
+label.chk{display:inline-flex;gap:6px;align-items:center;color:var(--dim);font-size:12.5px;cursor:pointer}
+input,select{padding:7px 10px;border-radius:9px;border:1px solid var(--line);background:var(--panel2)}
 table{width:100%;border-collapse:collapse;font-size:12.5px}
 th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
 th{color:var(--dim);font-weight:500;font-size:11.5px;white-space:nowrap}
@@ -56,303 +48,145 @@ th{color:var(--dim);font-weight:500;font-size:11.5px;white-space:nowrap}
 .badge.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,var(--line))}
 .badge.bad{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,var(--line))}
 .badge.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
-.log{background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);padding:11px;min-height:130px;max-height:46vh;overflow:auto}
-.msg{margin-bottom:10px}.msg .who{font-size:11.5px;color:var(--dim);margin-bottom:2px}.msg .body{white-space:pre-wrap;word-break:break-word}
-.msg.tool .body,.msg.result .body{font-family:var(--mono);font-size:12.5px;color:color-mix(in srgb,var(--ok) 70%,var(--fg))}
-.msg.user .body{color:color-mix(in srgb,var(--acc) 75%,var(--fg))}
-pre{background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding:9px;overflow:auto;font-size:11.5px;margin:5px 0}
-details summary{cursor:pointer;color:var(--dim);font-size:11.5px}
-.alert{display:flex;gap:8px;align-items:center;padding:9px 12px;border-radius:10px;margin-bottom:9px;font-size:12.5px;border:1px solid var(--line)}
-.alert.bad{border-color:color-mix(in srgb,var(--bad) 45%,var(--line));color:var(--bad);background:color-mix(in srgb,var(--bad) 8%,transparent)}
-.alert.warn{border-color:color-mix(in srgb,var(--warn) 45%,var(--line));color:var(--warn);background:color-mix(in srgb,var(--warn) 8%,transparent)}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:13px}
-.chart{width:100%;height:120px;display:block}
+.alert{padding:9px 12px;border-radius:10px;margin-bottom:9px;font-size:12.5px;border:1px solid var(--line)}
+.alert.warn{border-color:color-mix(in srgb,var(--warn) 45%,var(--line));color:var(--warn)}
+.alert.bad{border-color:color-mix(in srgb,var(--bad) 45%,var(--line));color:var(--bad)}
 .login{position:fixed;inset:0;display:none;place-items:center;background:#000a;backdrop-filter:blur(4px);z-index:50}
 .login.on{display:grid}
-.login .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;width:min(360px,92vw)}
+.login .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;width:min(420px,92vw)}
 .login h3{margin:0 0 12px;font-size:15px}
-.verdict{margin-top:11px;padding:11px 13px;border-radius:var(--r);border:1px solid var(--line);background:var(--panel2)}
-@media(max-width:900px){.nav{display:none}.grid2{grid-template-columns:1fr}}
+pre{background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding:9px;overflow:auto;font-size:11.5px}
+@media(max-width:760px){.nav{display:none}}
 </style>
 </head>
 <body>
 <div class="shell">
   <aside class="nav">
     <div class="brand"><span class="dot"></span>meoo2api</div>
-    <button class="on" data-view="overview"><span class="ico">▦</span>概览</button>
-    <button data-view="keys"><span class="ico">⚿</span>密钥池</button>
-    <button data-view="clients"><span class="ico">◇</span>访问密钥</button>
-    <div class="sep"></div>
-    <button data-view="chat"><span class="ico">✦</span>对话</button>
-    <button data-view="tools"><span class="ico">⚙</span>工具调用</button>
-    <button data-view="iso"><span class="ico">⧉</span>上下文隔离</button>
-    <div class="sep"></div>
-    <button data-view="accounts"><span class="ico">☺</span>账号</button>
-    <button data-view="models"><span class="ico">▤</span>模型 / 别名</button>
-    <button data-view="usage"><span class="ico">◷</span>用量</button>
-    <button data-view="logs"><span class="ico">≡</span>请求日志</button>
-    <button data-view="settings"><span class="ico">⚒</span>设置</button>
-    <div class="foot">
-      <div id="fUp">—</div>
-      <div id="fKeys">—</div>
-      <div id="fVer">v1.0</div>
-    </div>
+    <button class="on" data-view="overview"><span>▦</span>概览</button>
+    <button data-view="accounts"><span>☺</span>账号管理</button>
+    <button data-view="logs"><span>≡</span>请求日志</button>
+    <button data-view="settings"><span>⚒</span>设置</button>
+    <div class="foot"><div id="fUp">—</div><div id="fAcc">—</div></div>
   </aside>
 
   <div class="main">
     <header class="topbar">
       <div class="title">控制台</div>
       <span class="pill" id="pHealth">检测中</span>
-      <span class="pill" id="pKeys">key —</span>
-      <input id="apiKey" type="password" placeholder="客户端 key 或 meoo_project_…（测试用）" style="width:280px;padding:6px 10px;border-radius:9px;border:1px solid var(--line);background:var(--panel);font-family:var(--mono);font-size:12px" autocomplete="off">
-      <button class="btn" id="saveApiKey">保存</button>
-      <button class="btn" id="theme" title="主题">◐</button>
-      <button class="btn" id="logout" title="退出登录">⏻</button>
+      <span class="pill" id="pKeys">API Key —</span>
+      <button class="btn" id="theme">◐</button>
+      <button class="btn" id="logout">⏻</button>
     </header>
 
     <div class="views">
       <!-- 概览 -->
       <section class="view on" id="v-overview">
-        <h2>概览</h2><div class="sub">运行状态、key 健康、近 24 小时流量</div>
+        <h2>概览</h2><div class="sub">账号即号池：一个账号对应一个项目 API Key</div>
         <div id="alerts"></div>
         <div class="cards">
+          <div class="card"><div class="k">账号</div><div class="v" id="cAcc">0</div></div>
+          <div class="card"><div class="k">可用 API Key</div><div class="v" id="cKey">0</div></div>
+          <div class="card"><div class="k">今日已签到</div><div class="v" id="cCi">0</div></div>
           <div class="card"><div class="k">总请求</div><div class="v" id="cReq">0</div></div>
-          <div class="card"><div class="k">成功率</div><div class="v" id="cOk">—</div></div>
-          <div class="card"><div class="k">P95 延迟</div><div class="v" id="cP95">—<small>ms</small></div></div>
-          <div class="card"><div class="k">可用 key</div><div class="v" id="cKeys">—</div></div>
-          <div class="card"><div class="k">模型</div><div class="v" id="cModels">—</div></div>
-          <div class="card"><div class="k">运行时长</div><div class="v" id="cUp">—</div></div>
         </div>
-        <div class="panel">
-          <div class="head"><b>近 24 小时请求</b><span class="muted" id="chartNote"></span>
-            <span style="margin-left:auto"></span>
-            <button class="btn sm" id="probeAll">全部探活</button>
-            <button class="btn sm" id="refreshAll">刷新</button>
-          </div>
-          <svg class="chart" id="chart" viewBox="0 0 600 120" preserveAspectRatio="none"></svg>
-        </div>
-        <div class="panel">
-          <div class="head"><b>最近请求</b></div>
-          <div style="overflow:auto"><table><thead><tr><th>时间</th><th>模型</th><th>状态</th><th>耗时</th><th>key</th></tr></thead><tbody id="recentBody"></tbody></table></div>
-        </div>
-      </section>
-
-      <!-- 密钥池 -->
-      <section class="view" id="v-keys">
-        <h2>密钥池</h2><div class="sub">多个项目服务 AK 轮询，失败自动冷却</div>
-        <div class="row">
-          <button class="btn primary" id="openKeyModal">+ 添加密钥</button>
-          <span class="muted">只需粘一把 meoo_project_…，添加后自动探活</span>
-        </div>
-        <div class="panel" style="padding:0;overflow:auto">
-          <table><thead><tr><th>备注</th><th>key</th><th>账号</th><th>健康</th><th>权重</th><th>请求 / 失败</th><th>tokens</th><th>最近使用</th><th>操作</th></tr></thead>
-          <tbody id="keysBody"></tbody></table>
-        </div>
-      </section>
-
-      <!-- 访问密钥 -->
-      <section class="view" id="v-clients">
-        <h2>访问密钥</h2><div class="sub">发给调用方的 key，命中后使用密钥池里的项目 AK</div>
         <div class="panel">
           <div class="row">
-            <input id="cLabel" placeholder="备注，如 opencode" style="width:180px">
-            <input id="cValue" placeholder="留空自动生成 sk-…" style="width:280px;font-family:var(--mono);font-size:12px">
-            <button class="btn primary" id="addClient">生成</button>
+            <button class="btn primary" id="btnCheckinAll">全部签到</button>
+            <button class="btn" id="btnProbeAll">全部探活</button>
+            <span class="muted" id="opStat"></span>
           </div>
         </div>
         <div class="panel" style="padding:0;overflow:auto">
-          <table><thead><tr><th>备注</th><th>key</th><th>状态</th><th>请求</th><th>创建</th><th>操作</th></tr></thead><tbody id="clientsBody"></tbody></table>
+          <table><thead><tr><th>时间</th><th>模型</th><th>状态</th><th>耗时</th><th>账号</th></tr></thead>
+          <tbody id="recentBody"></tbody></table>
         </div>
       </section>
 
-      <!-- 对话 -->
-      <section class="view" id="v-chat">
-        <h2>对话</h2><div class="sub">验证 OpenAI 兼容面</div>
-        <div class="row">
-          <select id="chatModel"></select>
-          <label class="chk"><input type="checkbox" id="stream" checked> 流式</label>
-          <span class="muted">max_tokens <input id="mt" type="number" value="800" style="width:88px"></span>
-          <span class="muted">temperature <input id="temp" type="number" step="0.1" value="0.7" style="width:74px"></span>
-          <button class="btn" id="clearChat">清空</button><span class="muted" id="chatStat"></span>
-        </div>
-        <div id="chatLog" class="log"></div>
-        <div class="row" style="margin-top:9px"><textarea id="prompt" placeholder="Ctrl+Enter 发送"></textarea></div>
-        <div class="row"><button class="btn primary" id="send">发送</button></div>
-      </section>
-
-      <!-- 工具调用 -->
-      <section class="view" id="v-tools">
-        <h2>工具调用</h2><div class="sub">tool_calls → 本地执行 → 回传 → 最终回答</div>
-        <div class="row">
-          <span class="muted">工具</span>
-          <label class="chk"><input type="checkbox" class="tool" value="get_weather" checked> get_weather</label>
-          <label class="chk"><input type="checkbox" class="tool" value="get_time" checked> get_time</label>
-          <label class="chk"><input type="checkbox" class="tool" value="calc" checked> calc</label>
-          <span class="muted">轮次 <input id="rounds" type="number" value="3" style="width:60px"></span>
-        </div>
-        <div class="row"><textarea id="toolPrompt">北京和上海现在天气怎么样？顺便算一下 23*17，再告诉我东京现在几点。</textarea></div>
-        <div class="row"><button class="btn primary" id="runTools">运行</button><span class="muted" id="toolStat"></span></div>
-        <div id="toolLog" class="log"></div>
-      </section>
-
-      <!-- 隔离 -->
-      <section class="view" id="v-iso">
-        <h2>上下文隔离</h2><div class="sub">连发两次独立请求，第二次不带历史</div>
-        <div class="row"><button class="btn primary" id="runIso">运行</button><span class="muted">期望：第二次不知道第一次的暗号</span></div>
-        <div id="isoLog" class="log"></div><div id="isoVerdict"></div>
-      </section>
-
-      <!-- 账号 -->
+      <!-- 账号管理 -->
       <section class="view" id="v-accounts">
-        <h2>账号</h2>
-        <div class="sub">一个账号 = 登录态 + 个人 AK + 它产出的项目 AK（只有项目 AK 进号池）</div>
+        <h2>账号管理</h2>
+        <div class="sub">添加账号时自动：识别账号 → 建个人 AK → 建项目 → 开云服务 → 取项目 AK 入池</div>
         <div class="row">
-          <button class="btn primary" id="openAccModal">+ 添加账号</button>
-          <button class="btn" id="runAllAcc">全部签到</button>
-          <label class="chk"><input type="checkbox" id="autoCi"> 每天 <input id="ciHour" type="number" min="0" max="23" value="0" style="width:52px"> 点后签到一次</label>
-          <label class="chk">会话保活每 <input id="ciKeep" type="number" min="1" max="48" value="6" style="width:52px"> 小时</label>
-          <label class="chk"><input type="checkbox" id="autoOnboard"> 新账号自动接入号池</label>
+          <button class="btn primary" id="openAdd">+ 添加账号</button>
+          <label class="chk"><input type="checkbox" id="autoCi"> 每天 <input id="ciHour" type="number" min="0" max="23" value="0" style="width:52px"> 点后签到</label>
+          <label class="chk">保活每 <input id="ciKeep" type="number" min="1" max="48" value="6" style="width:52px"> 小时</label>
           <span class="muted" id="accStat"></span>
         </div>
-        <div id="accWarn"></div>
         <div class="panel" style="padding:0;overflow:auto">
-          <table><thead><tr>
-            <th>备注</th><th>账号</th><th>会话</th><th>签到</th><th>个人 AK</th><th>项目 AK（池内）</th><th>操作</th>
-          </tr></thead><tbody id="accBody"></tbody></table>
-        </div>
-        <div class="panel">
-          <div class="muted" style="line-height:1.8">
-            个人 AK 调不动模型网关（401 SERVICE_AK_FORMAT_INVALID），它只用来建项目、取项目 AK。<br>
-            点「接入号池」会自动：建项目 → 开云服务（占 1 个云服务额度）→ 取项目 AK → 入池。
-          </div>
+          <table><thead><tr><th>账号</th><th>API Key</th><th>状态</th><th>签到</th><th>操作</th></tr></thead>
+          <tbody id="accBody"></tbody></table>
         </div>
       </section>
 
-      <!-- 模型 -->
-      <section class="view" id="v-models">
-        <h2>模型 / 别名</h2><div class="sub">上游模型清单与别名映射，可隐藏</div>
-        <div class="grid2">
-          <div class="panel" style="padding:0;overflow:auto">
-            <table><thead><tr><th>模型</th><th>来源</th><th>操作</th></tr></thead><tbody id="modelsBody"></tbody></table>
-          </div>
-          <div>
-            <div class="panel">
-              <div class="head"><b>新增别名</b></div>
-              <div class="row">
-                <input id="alName" placeholder="别名，如 deepseek v4.1 flash" style="width:210px">
-                <input id="alTarget" placeholder="目标 id" style="width:200px;font-family:var(--mono);font-size:12px">
-                <button class="btn primary" id="addAlias">添加</button>
-              </div>
-            </div>
-            <div class="panel" style="padding:0;overflow:auto;max-height:40vh">
-              <table><thead><tr><th>别名</th><th>目标</th><th></th></tr></thead><tbody id="aliasBody"></tbody></table>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- 用量 -->
-      <section class="view" id="v-usage">
-        <h2>用量</h2><div class="sub">按小时聚合，保留 168 小时</div>
-        <div class="row">
-          <select id="usageHours"><option value="24">24 小时</option><option value="72">72 小时</option><option value="168">7 天</option></select>
-          <button class="btn" id="reloadUsage">刷新</button>
-        </div>
-        <div class="panel" style="padding:0;overflow:auto;max-height:60vh">
-          <table><thead><tr><th>小时</th><th>请求</th><th>成功</th><th>失败</th><th>prompt</th><th>completion</th><th>P50</th><th>P95</th></tr></thead>
-          <tbody id="usageBody"></tbody></table>
-        </div>
-      </section>
-
-      <!-- 日志 -->
+      <!-- 请求日志 -->
       <section class="view" id="v-logs">
-        <h2>请求日志</h2><div class="sub">服务端记录，不含请求体与 key 明文</div>
+        <h2>请求日志</h2><div class="sub">不含请求体与 key 明文</div>
         <div class="row">
           <select id="logStatus"><option value="">全部</option><option value="ok">成功</option><option value="fail">失败</option></select>
-          <input id="logQ" placeholder="request id / key 备注" style="width:200px">
+          <input id="logQ" placeholder="request id / 账号" style="width:190px">
           <button class="btn" id="reloadLogs">查询</button>
           <span class="muted" id="logCount"></span>
         </div>
-        <div class="panel" style="padding:0;overflow:auto;max-height:60vh">
-          <table><thead><tr><th>时间</th><th>方法</th><th>路径</th><th>模型</th><th>状态</th><th>耗时</th><th>tokens</th><th>key</th><th>rid</th></tr></thead>
+        <div class="panel" style="padding:0;overflow:auto;max-height:62vh">
+          <table><thead><tr><th>时间</th><th>方法</th><th>路径</th><th>模型</th><th>状态</th><th>耗时</th><th>tokens</th><th>账号</th></tr></thead>
           <tbody id="logBody"></tbody></table>
         </div>
       </section>
 
       <!-- 设置 -->
       <section class="view" id="v-settings">
-        <h2>设置</h2><div class="sub">热更新，保存即生效</div>
+        <h2>设置</h2><div class="sub">保存即生效</div>
         <div class="panel">
-          <div class="head"><b>运行参数</b></div>
           <div class="row">
             <span class="muted">默认 max_tokens <input id="cfgMt" type="number" style="width:96px"></span>
             <span class="muted">上游超时(ms) <input id="cfgTimeout" type="number" style="width:110px"></span>
-            <label class="chk"><input type="checkbox" id="cfgSticky"> 粘性（同一 key 优先复用）</label>
+            <label class="chk"><input type="checkbox" id="cfgSticky"> 粘性（同一 API Key 优先复用）</label>
           </div>
           <div class="row">
             <span class="muted">软冷却(秒) <input id="cfgCool" type="number" style="width:88px"></span>
-            <span class="muted">硬冷却(秒) <input id="cfgHardCool" type="number" style="width:88px"></span>
-            <span class="muted">日志上限 <input id="cfgLogs" type="number" style="width:88px"></span>
+            <span class="muted">硬冷却(秒) <input id="cfgHard" type="number" style="width:88px"></span>
           </div>
-          <div class="row"><button class="btn primary" id="saveCfg">保存配置</button><span class="muted" id="cfgStat"></span></div>
+          <div class="row"><button class="btn primary" id="saveCfg">保存</button><span class="muted" id="cfgStat"></span></div>
         </div>
         <div class="panel">
-          <div class="head"><b>管理密码</b></div>
           <div class="row">
-            <input id="newPass" type="password" placeholder="新密码" style="width:220px">
-            <button class="btn" id="savePass">修改</button>
-            <span class="muted">修改后需要重新登录</span>
+            <input id="newPass" type="password" placeholder="新管理密码" style="width:220px">
+            <button class="btn" id="savePass">修改密码</button>
           </div>
         </div>
         <div class="panel">
-          <div class="head"><b>导出</b></div>
-          <div class="row"><button class="btn" id="exportState">下载 state.json</button><span class="muted">不含管理密码哈希</span></div>
+          <div class="row"><button class="btn" id="exportState">导出 state.json</button></div>
         </div>
       </section>
     </div>
   </div>
 </div>
 
-<div class="login" id="keyModal"><div class="box">
-  <h3>添加密钥</h3>
-  <div class="row"><input id="kValue" placeholder="粘贴 meoo_project_…" style="width:100%;font-family:var(--mono);font-size:12px"></div>
-  <div class="row"><input id="kLabel" placeholder="备注（可留空）" style="width:100%"></div>
-  <div class="row" style="justify-content:flex-end;margin-bottom:0">
-    <button class="btn" id="kCancel">取消</button>
-    <button class="btn primary" id="addKey">添加并探活</button>
-  </div>
-  <div class="muted" id="kMsg" style="margin-top:8px"></div>
-</div></div>
-
-<div class="login" id="ciModal"><div class="box">
+<div class="login" id="addModal"><div class="box">
   <h3>添加账号</h3>
-  <div class="row"><input id="ciLabel" placeholder="备注，如 主号" style="width:100%"></div>
-  <div class="row"><textarea id="ciCookie" placeholder="粘贴 meoo.com 的 Cookie" style="min-height:80px;font-family:var(--mono);font-size:11.5px"></textarea></div>
+  <div class="muted" style="margin-bottom:8px">浏览器登录 meoo.com → F12 → Network → 任意请求的 Cookie 头整段复制</div>
+  <div class="row"><input id="addCookie" placeholder="粘贴 Cookie" style="width:100%;font-family:var(--mono);font-size:11.5px"></div>
   <div class="row" style="justify-content:flex-end;margin-bottom:0">
-    <button class="btn" id="ciCancel">取消</button>
-    <button class="btn primary" id="addCi">添加</button>
+    <button class="btn" id="addCancel">取消</button>
+    <button class="btn primary" id="addOk">添加并自动接入</button>
   </div>
-  <div class="muted" id="ciMsg" style="margin-top:8px"></div>
+  <div class="muted" id="addMsg" style="margin-top:8px"></div>
 </div></div>
 
-<div class="login" id="login">
-  <div class="box">
-    <h3>登录控制台</h3>
-    <div class="row"><input id="lgUser" value="admin" placeholder="用户名" style="width:100%"></div>
-    <div class="row"><input id="lgPass" type="password" placeholder="管理密码" style="width:100%"></div>
-    <div class="row"><button class="btn primary" id="lgBtn" style="width:100%">登录</button></div>
-    <div class="muted" id="lgMsg" style="margin-top:8px"></div>
-  </div>
-</div>
+<div class="login" id="login"><div class="box">
+  <h3>登录控制台</h3>
+  <div class="row"><input id="lgUser" value="admin" style="width:100%"></div>
+  <div class="row"><input id="lgPass" type="password" placeholder="管理密码" style="width:100%"></div>
+  <div class="row"><button class="btn primary" id="lgBtn" style="width:100%">登录</button></div>
+  <div class="muted" id="lgMsg" style="margin-top:8px"></div>
+</div></div>
 
 <script>
 const $=(s)=>document.querySelector(s), $$=(s)=>[...document.querySelectorAll(s)];
 const esc=(s)=>String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-const mono=(v)=>typeof v==='string'?v:JSON.stringify(v,null,2);
-let TOKEN=sessionStorage.getItem('m2a_admin')||'';
-let SNAP=null;
+let TOKEN=sessionStorage.getItem('m2a_admin')||'', SNAP=null;
 
-/* ── 基础 ── */
 async function admin(path,opts={}){
   const r=await fetch(location.origin+path,{...opts,headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN,...(opts.headers||{})}});
   if(r.status===401){showLogin();throw new Error('需要登录');}
@@ -369,361 +203,197 @@ $('#lgBtn').onclick=async()=>{
   TOKEN=d.token;sessionStorage.setItem('m2a_admin',TOKEN);
   $('#login').classList.remove('on');await refresh();
 };
-$('#lgPass').addEventListener('keydown',(e)=>{if(e.key==='Enter')$('#lgBtn').click();});
+$('#lgPass').addEventListener('keydown',e=>{if(e.key==='Enter')$('#lgBtn').click();});
 $('#logout').onclick=()=>{TOKEN='';sessionStorage.removeItem('m2a_admin');showLogin();};
 
-/* ── 导航 ── */
 $$('.nav button[data-view]').forEach(b=>b.onclick=()=>{
   $$('.nav button[data-view]').forEach(x=>x.classList.toggle('on',x===b));
   $$('.view').forEach(v=>v.classList.toggle('on',v.id==='v-'+b.dataset.view));
-  if(b.dataset.view==='usage')loadUsage();
   if(b.dataset.view==='logs')loadLogs();
-  if(b.dataset.view==='models')renderModels();
-  if(b.dataset.view==='accounts')renderAccounts();
 });
-
-/* ── 主题 ── */
 document.documentElement.dataset.theme=localStorage.getItem('m2a_theme')||'dark';
-$('#theme').onclick=()=>{const t=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=t;localStorage.setItem('m2a_theme',t);};
+$('#theme').onclick=()=>{const t=document.documentElement.dataset.theme==='dark'?'light':'dark';
+  document.documentElement.dataset.theme=t;localStorage.setItem('m2a_theme',t);};
 
-/* ── 刷新主快照 ── */
 async function refresh(){
   try{
     const h=await (await fetch(location.origin+'/healthz')).json();
     $('#pHealth').className='pill '+(h.usable>0?'ok':'bad');
-    $('#pHealth').textContent=`上游 ${h.usable}/${h.keys} 可用`;
-    $('#pKeys').textContent=`key ${h.usable}/${h.keys}`;
-    $('#fUp').textContent=h.upstream.replace(/^https?:\/\//,'');
-    $('#fKeys').textContent=`池 ${h.keys} · 客户端 ${h.clientKeys}`;
-    $('#cKeys').innerHTML=`${h.usable}<small>/ ${h.keys}</small>`;
-    $('#cModels').textContent=h.models;
-    $('#cUp').textContent=fmtDur(h.uptime);
+    $('#pHealth').textContent=`API Key ${h.usable}/${h.keys}`;
+    $('#pKeys').textContent=`API Key ${h.usable}/${h.keys}`;
+    $('#fUp').textContent=(h.upstream||'').replace(/^https?:\/\//,'');
+    $('#fAcc').textContent=`账号 ${h.checkins??h.accounts??0}`;
     $('#alerts').innerHTML=(h.alerts||[]).map(a=>`<div class="alert ${a.level}">● ${esc(a.text)}</div>`).join('');
-  }catch(e){
-    $('#pHealth').className='pill bad';$('#pHealth').textContent='服务不可达';
-  }
+  }catch(e){$('#pHealth').className='pill bad';$('#pHealth').textContent='服务不可达';}
   if(!TOKEN)return;
   try{
     SNAP=await admin('/admin/api/state');
-    renderKeys();renderClients();renderAliases();renderAccounts();fillCfg();
-    const all=SNAP.models.length+Object.keys(SNAP.config.aliases).length;
-    $('#cModels').textContent=all;
-    await loadUsage(true);
-  }catch(e){ /* 登录框已弹出 */ }
+    renderAccounts(); fillSettings(); await loadUsage();
+  }catch(e){}
 }
-const fmtDur=(s)=>{s=Math.floor(s||0);const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);return d?`${d}d${h}h`:h?`${h}h${m}m`:`${m}m`;};
-$('#refreshAll').onclick=refresh;
 
-/* ── 概览 ── */
-async function loadUsage(draw=false){
-  let data;
-  try{data=await admin('/admin/api/usage?hours='+($('#usageHours')?.value||24));}catch{return;}
-  const rows=data.hours;
-  const reqSum=rows.reduce((a,r)=>a+r.req,0);
-  const okSum=rows.reduce((a,r)=>a+r.ok,0);
-  $('#cReq').textContent=reqSum;
-  $('#cOk').textContent=reqSum?Math.round(okSum/reqSum*100)+'%':'—';
-  const p95=rows.length?Math.max(...rows.map(r=>r.p95||0)):0;
-  $('#cP95').innerHTML=p95?p95+'<small>ms</small>':'—';
-  if(draw)drawChart(rows);
-  const tb=$('#usageBody');
-  tb.innerHTML=rows.slice().reverse().map(r=>`<tr><td class="mono">${esc(r.hour)}</td><td>${r.req}</td><td>${r.ok}</td>
-    <td>${r.fail}</td><td class="mono">${r.pt}</td><td class="mono">${r.ct}</td><td class="mono">${r.p50}ms</td><td class="mono">${r.p95}ms</td></tr>`).join('')
-    ||'<tr><td colspan="8" class="muted" style="padding:12px">暂无数据</td></tr>';
+function keyBadge(a){
+  if(!a.key) return '<span class="badge warn">无 Key</span>';
+  const h=a.key.health;
+  if(a.key.cooldown>0) return `<span class="badge warn">冷却 ${a.key.cooldown}s</span>`;
+  if(h==='ok') return `<span class="badge ok">正常 ${a.key.latencyMs||0}ms</span>`;
+  if(h==='invalid') return '<span class="badge bad">鉴权失败</span>';
+  if(h==='error') return '<span class="badge bad">异常</span>';
+  return '<span class="badge">未探测</span>';
+}
+
+function renderAccounts(){
+  if(!SNAP)return;
+  const today=new Date().toISOString().slice(0,10);
+  const list=SNAP.accounts||[];
+  $('#accBody').innerHTML=list.map(a=>{
+    const done=a.lastGrantDate===today;
+    const session=a.expired?'<span class="badge bad">会话失效</span>'
+      :(a.lastPing?`<span class="badge ok">${new Date(a.lastPing).toLocaleTimeString('zh-CN',{hour12:false})}</span>`:'<span class="badge">未保活</span>');
+    return `<tr data-id="${a.id}">
+      <td>${a.name?`<div>${esc(a.name)}</div><div class="muted mono">${esc(a.userId||'')}</div>`:'<span class="muted">未识别</span>'}</td>
+      <td class="mono">${a.key?esc(a.key.key):'<span class="muted">—</span>'}</td>
+      <td>${keyBadge(a)}<div class="muted">${session}</div></td>
+      <td>${done?'<span class="badge ok">今日已签</span>':'<span class="badge warn">待签</span>'}
+          <div class="muted">累计 ${a.totalGranted||0}</div></td>
+      <td>
+        <button class="btn sm" data-act="copy">复制 Key</button>
+        <button class="btn sm" data-act="probe">探活</button>
+        <button class="btn sm" data-act="checkin">签到</button>
+        <button class="btn sm" data-act="ping">保活</button>
+        <button class="btn sm danger" data-act="del">删除</button>
+      </td></tr>`;
+  }).join('') + (SNAP.orphanKeys||[]).map(k=>`<tr data-orphan="${k.id}">
+      <td><span class="muted">未绑定账号</span></td>
+      <td class="mono">${esc(k.key)}</td>
+      <td>${k.cooldown>0?`<span class="badge warn">冷却 ${k.cooldown}s</span>`:`<span class="badge ${k.health==='ok'?'ok':''}">${k.health==='ok'?'正常 '+(k.latencyMs||0)+'ms':k.health}</span>`}</td>
+      <td class="muted">—</td>
+      <td>
+        <button class="btn sm" data-orphan-act="copy">复制 Key</button>
+        <button class="btn sm danger" data-orphan-act="del">删除</button>
+      </td></tr>`).join('')
+    ||'<tr><td colspan="5" class="muted" style="padding:14px">还没有账号，点「+ 添加账号」</td></tr>';
+
+  $('#accBody').querySelectorAll('button[data-orphan-act]').forEach(b=>b.onclick=async()=>{
+    const tr=b.closest('tr'), id=tr.dataset.orphan, act=b.dataset.orphanAct;
+    try{
+      if(act==='copy'){const r=await admin(`/admin/api/state`);alert('未绑定 Key 请在号池数据中查看');}
+      if(act==='del'){if(!confirm('删除这个未绑定的 Key？'))return;
+        await fetch(location.origin+`/admin/api/orphan-keys/${id}`,{method:'DELETE',headers:{Authorization:'Bearer '+TOKEN}});
+        await refresh();}
+    }catch(e){alert(e.message);}
+  });
+
+  $('#accBody').querySelectorAll('button[data-act]').forEach(b=>b.onclick=async()=>{
+    const id=b.closest('tr').dataset.id, act=b.dataset.act;
+    b.disabled=true; const label=b.textContent; b.textContent='…';
+    try{
+      if(act==='copy'){const r=await admin(`/admin/api/accounts/${id}/key`);navigator.clipboard?.writeText(r.key);alert('已复制：'+r.key);}
+      if(act==='probe'){const r=await admin(`/admin/api/accounts/${id}/probe`,{method:'POST'});
+        alert(r.state==='ok'?`正常 ${r.latencyMs}ms`:'异常：'+(r.error||r.state));}
+      if(act==='checkin'){const r=await admin(`/admin/api/accounts/${id}/checkin`,{method:'POST'});
+        alert(r.ok?(r.granted?`签到成功 +${r.amount}`:'今日已领'):('失败：'+(r.error||'')));}
+      if(act==='ping'){const r=await admin(`/admin/api/accounts/${id}/ping`,{method:'POST'});
+        alert(r.ok?'会话有效':'失败：'+(r.error||''));}
+      if(act==='del'){if(!confirm('删除账号及其 API Key？'))return;await admin(`/admin/api/accounts/${id}`,{method:'DELETE'});}
+      await refresh();
+    }catch(e){alert(e.message);}
+    finally{b.disabled=false;b.textContent=label;}
+  });
+
+  $('#accStat').textContent=`${list.length} 个账号 · ${list.filter(a=>a.key).length} 个 API Key`;
+  $('#autoCi').checked=!!(SNAP.config.autoCheckin);
+  $('#ciHour').value=SNAP.config.checkinHour??0;
+  $('#ciKeep').value=SNAP.config.keepAliveHours||6;
+  $('#cAcc').textContent=list.length;
+  $('#cKey').textContent=list.filter(a=>a.key&&a.key.health==='ok').length;
+  $('#cCi').textContent=list.filter(a=>a.lastGrantDate===today).length;
+}
+
+$('#openAdd').onclick=()=>{$('#addModal').classList.add('on');$('#addCookie').focus();};
+$('#addCancel').onclick=()=>$('#addModal').classList.remove('on');
+$('#addOk').onclick=async()=>{
+  const cookie=$('#addCookie').value.trim();
+  if(!cookie){$('#addMsg').textContent='先粘贴 Cookie';return;}
+  $('#addOk').disabled=true;$('#addMsg').textContent='识别 → 建 Key → 开项目 → 入池，约 10 秒…';
+  try{
+    const r=await admin('/admin/api/accounts',{method:'POST',body:JSON.stringify({cookie})});
+    $('#addMsg').innerHTML=r.key
+      ? `<span class="badge ok">完成</span> ${esc(r.name||'')} · API Key ${esc(r.key)} · 项目 ${esc(r.project||'')}`
+      : `<span class="badge warn">账号已添加，接入未完成</span> ${esc(r.error||'')}`;
+    $('#addCookie').value='';
+    await refresh();
+    setTimeout(()=>{$('#addModal').classList.remove('on');$('#addMsg').textContent='';},2500);
+  }catch(e){$('#addMsg').innerHTML=`<span class="badge bad">${esc(e.message)}</span>`;}
+  finally{$('#addOk').disabled=false;}
+};
+
+$('#btnCheckinAll').onclick=async()=>{
+  $('#opStat').textContent='签到中…';
+  try{const r=await admin('/admin/api/accounts-checkin-all',{method:'POST'});
+    $('#opStat').textContent=`完成：${r.results.filter(x=>x.granted).length} 个到账`;await refresh();}
+  catch(e){$('#opStat').textContent=e.message;}
+};
+$('#btnProbeAll').onclick=async()=>{
+  $('#opStat').textContent='探活中…';
+  try{
+    const st=await admin('/admin/api/state');
+    let ok=0;
+    for(const a of st.accounts||[]){
+      if(!a.key)continue;
+      const r=await admin(`/admin/api/accounts/${a.id}/probe`,{method:'POST'});
+      if(r.state==='ok')ok++;
+    }
+    $('#opStat').textContent=`探活完成：${ok}/${(st.accounts||[]).filter(a=>a.key).length} 可用`;
+    await refresh();
+  }catch(e){$('#opStat').textContent=e.message;}
+};
+
+async function loadUsage(){
+  try{
+    const d=await admin('/admin/api/usage?hours=24');
+    $('#cReq').textContent=d.hours.reduce((a,h)=>a+h.req,0);
+  }catch{}
   try{
     const l=await admin('/admin/api/logs?limit=8');
-    $('#recentBody').innerHTML=l.rows.map(r=>`<tr><td class="mono">${new Date(r.ts).toLocaleTimeString('zh-CN',{hour12:false})}</td>
-      <td>${esc(r.model||'—')}</td><td><span class="badge ${r.status<400?'ok':'bad'}">${r.status}</span></td>
+    $('#recentBody').innerHTML=l.rows.map(r=>`<tr>
+      <td class="mono">${new Date(r.ts).toLocaleTimeString('zh-CN',{hour12:false})}</td>
+      <td>${esc(r.model||'—')}</td>
+      <td><span class="badge ${r.status<400?'ok':'bad'}">${r.status}</span></td>
       <td class="mono">${r.ms}ms</td><td class="muted">${esc(r.keyLabel||'—')}</td></tr>`).join('')
       ||'<tr><td colspan="5" class="muted" style="padding:12px">暂无请求</td></tr>';
   }catch{}
 }
-function drawChart(rows){
-  const svg=$('#chart'); if(!svg)return;
-  const W=600,H=120,pad=4;
-  const vals=rows.map(r=>r.req), max=Math.max(1,...vals);
-  const bw=rows.length?Math.max(2,(W-pad*2)/rows.length-2):0;
-  let out='';
-  rows.forEach((r,i)=>{
-    const h=Math.round((r.req/max)*(H-24));
-    const x=pad+i*(bw+2), y=H-18-h;
-    const c=r.fail?'var(--warn)':'var(--acc)';
-    out+=`<rect x="${x}" y="${y}" width="${bw}" height="${Math.max(1,h)}" rx="2" fill="${c}" opacity=".85"/>`;
-  });
-  out+=`<line x1="0" y1="${H-18}" x2="${W}" y2="${H-18}" stroke="var(--line)"/>`;
-  svg.innerHTML=out;
-  $('#chartNote').textContent=rows.length?`峰值 ${max} 次/小时`:'暂无数据';
-}
-$('#usageHours').onchange=()=>loadUsage(true);
-$('#reloadUsage').onclick=()=>loadUsage(true);
-$('#probeAll').onclick=async()=>{
-  $('#probeAll').disabled=true;
-  try{const r=await admin('/admin/api/probe-all',{method:'POST'});
-    const ok=r.results.filter(x=>x.state==='ok').length;
-    $('#chartNote').textContent=`探活完成：${ok}/${r.results.length} 可用`;
-    await refresh();
-  }catch(e){$('#chartNote').textContent=e.message;}
-  finally{$('#probeAll').disabled=false;}
-};
 
-/* ── key 池 ── */
-function healthBadge(k){
-  if(!k.enabled)return '<span class="badge">已停用</span>';
-  if(k.cooling>0)return `<span class="badge warn">冷却 ${k.cooling}s</span>`;
-  const m={ok:['ok','正常'],invalid:['bad','鉴权失败'],error:['bad','异常'],unknown:['','未探测']};
-  const [c,t]=m[k.health.state]||['','未知'];
-  return `<span class="badge ${c}">${t}${k.health.latencyMs?` ${k.health.latencyMs}ms`:''}</span>`;
-}
-function renderKeys(){
-  if(!SNAP)return;
-  const tb=$('#keysBody');
-  if(!SNAP.keys.length){tb.innerHTML='<tr><td colspan="8" class="muted" style="padding:12px">还没有 key，先在上面添加，或直接用 BYOK</td></tr>';return;}
-  tb.innerHTML=SNAP.keys.map(k=>`<tr data-id="${k.id}">
-    <td><input value="${esc(k.label)}" data-f="label" style="width:110px;padding:3px 6px"></td>
-    <td class="mono">${esc(k.key)}</td>
-    <td>${k.account?`<span title="${esc(k.account.id)}">${esc(k.account.name)}</span>`
-      : (k.accountId?`<span>${esc((SNAP.accounts||[]).find(a=>a.id===k.accountId)?.label||k.accountId)}</span>`
-        : '<span class="muted">未绑定</span>')}</td>
-    <td>${healthBadge(k)}</td>
-    <td><input type="number" min="1" max="5" value="${k.weight}" data-f="weight" style="width:56px;padding:3px 5px"></td>
-    <td class="mono">${k.stats.req} / ${k.stats.fail}</td>
-    <td class="mono">${k.stats.pt + k.stats.ct}</td>
-    <td class="mono">${k.stats.lastUsed?new Date(k.stats.lastUsed).toLocaleTimeString('zh-CN',{hour12:false}):'—'}</td>
-    <td>
-      <button class="btn sm" data-act="probe">探活</button>
-      <button class="btn sm" data-act="identify">识别</button>
-      <button class="btn sm" data-act="toggle">${k.enabled?'停用':'启用'}</button>
-      <button class="btn sm" data-act="reset">解冷却</button>
-      <button class="btn sm danger" data-act="del">删除</button>
-    </td></tr>`).join('');
-  tb.querySelectorAll('button[data-act]').forEach(b=>b.onclick=async()=>{
-    const tr=b.closest('tr'), id=tr.dataset.id, act=b.dataset.act;
-    try{
-      if(act==='probe'){const h=await admin(`/admin/api/keys/${id}/probe`,{method:'POST'});
-        b.textContent=h.state==='ok'?'正常':'失败'; setTimeout(()=>refresh(),400); return;}
-      if(act==='identify'){const r=await admin(`/admin/api/keys/${id}/identify`,{method:'POST'});
-        alert('账号: '+(r.account?.name||'')+'\nID: '+(r.account?.id||''));await refresh();return;}
-      if(act==='toggle'){const k=SNAP.keys.find(x=>x.id===id);await admin(`/admin/api/keys/${id}`,{method:'PATCH',body:JSON.stringify({enabled:!k.enabled})});}
-      if(act==='reset'){await admin(`/admin/api/keys/${id}`,{method:'PATCH',body:JSON.stringify({resetCooldown:true})});}
-      if(act==='del'){if(!confirm('删除这个 key？'))return;await admin(`/admin/api/keys/${id}`,{method:'DELETE'});}
-      await refresh();
-    }catch(e){alert(e.message);}
-  });
-  tb.querySelectorAll('input[data-f]').forEach(inp=>inp.onchange=async()=>{
-    const id=inp.closest('tr').dataset.id, f=inp.dataset.f;
-    const v=f==='weight'?Number(inp.value):inp.value;
-    try{await admin(`/admin/api/keys/${id}`,{method:'PATCH',body:JSON.stringify({[f]:v})});await refresh();}catch(e){alert(e.message);}
-  });
-}
-$('#openKeyModal').onclick=()=>{$('#keyModal').classList.add('on');$('#kValue').focus();};
-$('#kCancel').onclick=()=>$('#keyModal').classList.remove('on');
-$('#addKey').onclick=async()=>{
-  const key=$('#kValue').value.trim();
-  if(!key){$('#kMsg').textContent='先粘贴密钥';return;}
-  $('#addKey').disabled=true;$('#kMsg').textContent='添加中…';
+async function loadLogs(){
+  const st=$('#logStatus').value,q=$('#logQ').value.trim();
   try{
-    const k=await admin('/admin/api/keys',{method:'POST',body:JSON.stringify({label:$('#kLabel').value.trim()||'key',key,weight:1})});
-    $('#kMsg').textContent='探活中…';
-    const h=await admin(`/admin/api/keys/${k.id}/probe`,{method:'POST'});
-    $('#kMsg').innerHTML = h.state==='ok'
-      ? `<span class="badge ok">已添加 · ${h.latencyMs}ms</span>`
-      : `<span class="badge bad">已添加但探活失败：${esc(h.error||'')}</span>`;
-    $('#kValue').value='';$('#kLabel').value='';
-    await refresh();
-    setTimeout(()=>{$('#keyModal').classList.remove('on');$('#kMsg').textContent='';},1200);
-  }catch(e){$('#kMsg').innerHTML=`<span class="badge bad">${esc(e.message)}</span>`;}
-  finally{$('#addKey').disabled=false;}
-};
-
-/* ── 客户端 key ── */
-function renderClients(){
-  if(!SNAP)return;
-  const tb=$('#clientsBody');
-  tb.innerHTML=SNAP.clientKeys.map(c=>`<tr data-id="${c.id}">
-    <td><input value="${esc(c.label)}" data-f="label" style="width:120px;padding:3px 6px"></td>
-    <td class="mono">${esc(c.key)}</td>
-    <td><span class="badge ${c.enabled?'ok':''}">${c.enabled?'启用':'停用'}</span></td>
-    <td class="mono">${c.stats.req}</td>
-    <td class="mono">${new Date(c.createdAt).toLocaleDateString('zh-CN')}</td>
-    <td><button class="btn sm" data-act="copy">复制</button>
-        <button class="btn sm" data-act="toggle">${c.enabled?'停用':'启用'}</button>
-        <button class="btn sm danger" data-act="del">删除</button></td></tr>`).join('')
-    ||'<tr><td colspan="6" class="muted" style="padding:12px">还没有访问密钥</td></tr>';
-  tb.querySelectorAll('button[data-act]').forEach(b=>b.onclick=async()=>{
-    const id=b.closest('tr').dataset.id, act=b.dataset.act, c=SNAP.clientKeys.find(x=>x.id===id);
-    try{
-      if(act==='copy'){const r=await admin(`/admin/api/client-keys/${id}/reveal`);navigator.clipboard?.writeText(r.key);alert('已复制：'+r.key);return;}
-      if(act==='toggle')await admin(`/admin/api/client-keys/${id}`,{method:'PATCH',body:JSON.stringify({enabled:!c.enabled})});
-      if(act==='del'){if(!confirm('删除？'))return;await admin(`/admin/api/client-keys/${id}`,{method:'DELETE'});}
-      await refresh();
-    }catch(e){alert(e.message);}
-  });
-  tb.querySelectorAll('input[data-f=label]').forEach(inp=>inp.onchange=async()=>{
-    const id=inp.closest('tr').dataset.id;
-    try{await admin(`/admin/api/client-keys/${id}`,{method:'PATCH',body:JSON.stringify({label:inp.value})});}catch(e){alert(e.message);}
-  });
+    const d=await admin(`/admin/api/logs?limit=200&status=${st}&q=${encodeURIComponent(q)}`);
+    $('#logCount').textContent=`${d.total} 条`;
+    $('#logBody').innerHTML=d.rows.map(r=>`<tr>
+      <td class="mono">${new Date(r.ts).toLocaleString('zh-CN',{hour12:false})}</td>
+      <td>${esc(r.method)}</td><td class="mono">${esc(r.path)}</td><td>${esc(r.model||'—')}</td>
+      <td><span class="badge ${r.status<400?'ok':'bad'}">${r.status}</span></td>
+      <td class="mono">${r.ms}ms</td><td class="mono">${r.pt||r.ct?(r.pt||0)+'/'+(r.ct||0):'—'}</td>
+      <td class="muted">${esc(r.keyLabel||'—')}</td></tr>`).join('')
+      ||'<tr><td colspan="8" class="muted" style="padding:12px">暂无记录</td></tr>';
+  }catch(e){}
 }
-$('#addClient').onclick=async()=>{
-  try{
-    const c=await admin('/admin/api/client-keys',{method:'POST',body:JSON.stringify({label:$('#cLabel').value.trim()||'默认',key:$('#cValue').value.trim()||undefined})});
-    $('#cValue').value='';$('#cLabel').value='';
-    alert('已生成：'+c.key);
-    await refresh();
-  }catch(e){alert(e.message);}
-};
+$('#reloadLogs').onclick=loadLogs;
 
-/* ── 账号 ── */
-function renderAccounts(){
-  if(!SNAP)return;
-  const list=SNAP.accounts||[];
-  const tb=$('#accBody');
-  const today=new Date().toISOString().slice(0,10);
-  tb.innerHTML=list.map(a=>{
-    const done=a.lastGrantDate===today;
-    const session = a.expired?'<span class="badge bad">会话失效</span>'
-      : (a.lastPing?`<span class="badge ${a.pingOk?'ok':''}">${new Date(a.lastPing).toLocaleTimeString('zh-CN',{hour12:false})}</span>`:'<span class="badge">未保活</span>');
-    const pk=(a.personalKeys||[]).length?`<span class="badge">${a.personalKeys.length} 个</span>`:'<span class="muted">无</span>';
-    const proj=(a.projectKeys||[]).length
-      ? a.projectKeys.map(k=>`<span class="badge ${k.health==='ok'?'ok':''}" title="${esc(k.key)}">${esc(k.label)}</span>`).join(' ')
-      : '<span class="muted">未接入</span>';
-    return `<tr data-id="${a.id}">
-      <td><input value="${esc(a.label)}" data-f="label" style="width:110px;padding:3px 6px"></td>
-      <td>${a.name?`<span title="${esc(a.userId||'')}">${esc(a.name)}</span>`:'<span class="muted">未识别</span>'}</td>
-      <td>${session}</td>
-      <td>${done?'<span class="badge ok">今日已领</span>':'<span class="badge warn">待领</span>'}
-          <span class="muted">累计 ${a.totalGranted||0}</span></td>
-      <td>${pk}</td>
-      <td>${proj}</td>
-      <td>
-        <button class="btn sm" data-act="ping">保活</button>
-        <button class="btn sm" data-act="checkin">签到</button>
-        <button class="btn sm" data-act="identify">识别</button>
-        <button class="btn sm" data-act="pkey">建个人 AK</button>
-        <button class="btn sm primary" data-act="onboard">接入号池</button>
-        <button class="btn sm danger" data-act="del">删除</button>
-      </td></tr>`;
-  }).join('')||'<tr><td colspan="7" class="muted" style="padding:12px">还没有账号，点「+ 添加账号」粘贴 Cookie</td></tr>';
-
-  tb.querySelectorAll('button[data-act]').forEach(b=>b.onclick=async()=>{
-    const id=b.closest('tr').dataset.id, act=b.dataset.act;
-    b.disabled=true;
-    const old=b.textContent; b.textContent='…';
-    try{
-      if(act==='ping'){const r=await admin(`/admin/api/accounts/${id}/ping`,{method:'POST'});
-        alert(r.ok?'会话有效（已保活）':'保活失败：'+(r.error||''));}
-      if(act==='checkin'){const r=await admin(`/admin/api/accounts/${id}/checkin`,{method:'POST'});
-        alert(r.ok?(r.granted?`签到成功 +${r.amount}`:'今日已领过，未再发放'):('失败：'+(r.error||'')));}
-      if(act==='identify'){const r=await admin(`/admin/api/accounts/${id}/identify`,{method:'POST'});
-        alert('账号：'+(r.name||'')+'\nuserId：'+(r.userId||''));}
-      if(act==='pkey'){
-        if(!confirm('在该账号下创建个人 API Key？\n（可调 CLI/Open API，不能直接进号池）'))return;
-        const r=await admin(`/admin/api/accounts/${id}/personal-key`,{method:'POST'});
-        navigator.clipboard?.writeText(r.key);
-        alert('已创建并复制：\n'+r.key+'\n\n'+r.note);}
-      if(act==='onboard'){
-        if(!confirm('接入号池将执行：\n1) 建项目\n2) 开通云服务（占 1 个云服务额度）\n3) 取项目服务 AK 入池\n\n继续？'))return;
-        const r=await admin(`/admin/api/accounts/${id}/onboard`,{method:'POST'});
-        alert(r.ok?('已入池：'+r.key+'\n项目：'+r.project):('失败：'+(r.error||JSON.stringify(r))));}
-      if(act==='del'){if(!confirm('删除该账号？（池内项目 AK 不会自动删除）'))return;
-        await admin(`/admin/api/accounts/${id}`,{method:'DELETE'});}
-      await refresh();
-    }catch(e){alert(e.message);}
-    finally{b.disabled=false;b.textContent=old;}
-  });
-  tb.querySelectorAll('input[data-f=label]').forEach(inp=>inp.onchange=async()=>{
-    const id=inp.closest('tr').dataset.id;
-    try{await admin(`/admin/api/accounts/${id}`,{method:'PATCH',body:JSON.stringify({label:inp.value})});}catch(e){alert(e.message);}
-  });
-
-  const keyAccs=[...new Set((SNAP.keys||[]).map(k=>k.accountId).filter(Boolean))];
-  const orphan=list.filter(a=>(a.projectKeys||[]).length===0);
-  $('#accWarn').innerHTML = orphan.length
-    ? `<div class="alert warn">● ${orphan.length} 个账号还没有项目 AK：它们只能签到，模型调用仍需其他账号的项目 AK</div>`
-    : '';
-  $('#autoCi').checked=!!(SNAP.config.autoCheckin);
-  $('#ciHour').value=SNAP.config.checkinHour??0;
-  $('#ciKeep').value=SNAP.config.keepAliveHours||6;
-  $('#autoOnboard').checked=!!SNAP.config.autoOnboard;
-  $('#accStat').textContent=`${list.length} 个账号 · 池内项目 AK ${keyAccs.length} 个`;
-  $('#accStat').dataset.ok='1';
-}
-$('#openAccModal').onclick=()=>{$('#ciModal').classList.add('on');};
-$('#ciCancel').onclick=()=>$('#ciModal').classList.remove('on');
-$('#addCi').onclick=async()=>{
-  const cookie=$('#ciCookie').value.trim();
-  if(!cookie){$('#ciMsg').textContent='先粘贴 Cookie';return;}
-  $('#addCi').disabled=true;$('#ciMsg').textContent='识别中…';
-  try{
-    const a=await admin('/admin/api/accounts',{method:'POST',body:JSON.stringify({label:$('#ciLabel').value.trim()||'账号',cookie})});
-    $('#ciMsg').innerHTML=`<span class="badge ok">${esc(a.name||a.label)}</span>`;
-    $('#ciCookie').value='';$('#ciLabel').value='';
-    await refresh();
-    setTimeout(()=>{$('#ciModal').classList.remove('on');$('#ciMsg').textContent='';},1200);
-  }catch(e){$('#ciMsg').innerHTML=`<span class="badge bad">${esc(e.message)}</span>`;}
-  finally{$('#addCi').disabled=false;}
-};
-$('#runAllAcc').onclick=async()=>{
-  $('#runAllAcc').disabled=true;$('#accStat').textContent='签到中…';
-  try{const r=await admin('/admin/api/accounts-checkin-all',{method:'POST'});
-    const ok=r.results.filter(x=>x.granted).length;
-    $('#accStat').textContent=`完成：${ok} 个账号今日到账`;await refresh();
-  }catch(e){$('#accStat').textContent=e.message;}
-  finally{$('#runAllAcc').disabled=false;}
-};
-async function saveCiCfg(){
-  await admin('/admin/api/config',{method:'PATCH',body:JSON.stringify({
-    autoCheckin:$('#autoCi').checked,
-    checkinHour:Number($('#ciHour').value)||0,
-    keepAliveHours:Number($('#ciKeep').value)||6,
-    autoOnboard:$('#autoOnboard').checked})});
-  await refresh();
-}
-$('#autoCi').onchange=saveCiCfg;
-$('#ciHour').onchange=saveCiCfg;
-$('#ciKeep').onchange=saveCiCfg;
-$('#autoOnboard').onchange=saveCiCfg;
-
-/* ── 模型 / 别名 ── */
-function renderModels(){
-  if(!SNAP)return;
-  const hidden=new Set(SNAP.config.hiddenModels||[]);
-  $('#modelsBody').innerHTML=SNAP.models.map(m=>`<tr>
-    <td class="mono">${esc(m)}</td><td><span class="badge">上游</span></td>
-    <td><button class="btn sm" data-hide="${esc(m)}">${hidden.has(m)?'显示':'隐藏'}</button></td></tr>`).join('');
-  $('#modelsBody').querySelectorAll('button[data-hide]').forEach(b=>b.onclick=async()=>{
-    const m=b.dataset.hide, next=hidden.has(m)?[...hidden].filter(x=>x!==m):[...hidden,m];
-    try{await admin('/admin/api/config',{method:'PATCH',body:JSON.stringify({hiddenModels:next})});await refresh();}catch(e){alert(e.message);}
-  });
-  renderAliases();
-}
-function renderAliases(){
-  if(!SNAP)return;
-  const al=SNAP.config.aliases||{};
-  $('#aliasBody').innerHTML=Object.entries(al).map(([n,t])=>`<tr>
-    <td class="mono">${esc(n)}</td><td class="mono muted">${esc(t)}</td>
-    <td><button class="btn sm danger" data-al="${esc(n)}">删</button></td></tr>`).join('')
-    ||'<tr><td colspan="3" class="muted" style="padding:12px">无别名</td></tr>';
-  $('#aliasBody').querySelectorAll('button[data-al]').forEach(b=>b.onclick=async()=>{
-    try{await admin('/admin/api/aliases?name='+encodeURIComponent(b.dataset.al),{method:'DELETE'});await refresh();}catch(e){alert(e.message);}
-  });
-}
-$('#addAlias').onclick=async()=>{
-  try{await admin('/admin/api/aliases',{method:'POST',body:JSON.stringify({name:$('#alName').value,target:$('#alTarget').value})});
-    $('#alName').value='';$('#alTarget').value='';await refresh();}catch(e){alert(e.message);}
-};
-
-/* ── 配置 ── */
-function fillCfg(){
+function fillSettings(){
   if(!SNAP)return;
   const c=SNAP.config;
-  $('#cfgMt').value=c.defaultMaxTokens;$('#cfgTimeout').value=c.timeoutMs;
-  $('#cfgSticky').checked=!!c.sticky;$('#cfgCool').value=c.cooldownSec;$('#cfgHardCool').value=c.hardCooldownSec;$('#cfgLogs').value=c.maxLogs;
+  $('#cfgMt').value=c.defaultMaxTokens;
+  $('#cfgTimeout').value=c.timeoutMs;
+  $('#cfgSticky').checked=!!c.sticky;
+  $('#cfgCool').value=c.cooldownSec;
+  $('#cfgHard').value=c.hardCooldownSec;
 }
 $('#saveCfg').onclick=async()=>{
   try{await admin('/admin/api/config',{method:'PATCH',body:JSON.stringify({
     defaultMaxTokens:Number($('#cfgMt').value),timeoutMs:Number($('#cfgTimeout').value),
-    sticky:$('#cfgSticky').checked,cooldownSec:Number($('#cfgCool').value),
-    hardCooldownSec:Number($('#cfgHardCool').value),maxLogs:Number($('#cfgLogs').value)})});
+    sticky:$('#cfgSticky').checked,cooldownSec:Number($('#cfgCool').value),hardCooldownSec:Number($('#cfgHard').value)})});
     $('#cfgStat').innerHTML='<span class="badge ok">已保存</span>';await refresh();
   }catch(e){$('#cfgStat').innerHTML='<span class="badge bad">'+esc(e.message)+'</span>';}
 };
@@ -737,153 +407,20 @@ $('#exportState').onclick=async()=>{
   const blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='meoo2api-state.json';a.click();
 };
-
-/* ── 日志 ── */
-async function loadLogs(){
-  const st=$('#logStatus').value, q=$('#logQ').value.trim();
-  let d; try{d=await admin(`/admin/api/logs?limit=200&status=${st}&q=${encodeURIComponent(q)}`);}catch{return;}
-  $('#logCount').textContent=`${d.total} 条`;
-  $('#logBody').innerHTML=d.rows.map(r=>`<tr>
-    <td class="mono">${new Date(r.ts).toLocaleString('zh-CN',{hour12:false})}</td>
-    <td>${esc(r.method)}</td><td class="mono">${esc(r.path)}</td><td>${esc(r.model||'—')}</td>
-    <td><span class="badge ${r.status<400?'ok':'bad'}">${r.status}</span></td>
-    <td class="mono">${r.ms}ms</td><td class="mono">${r.pt||r.ct?(r.pt||0)+'/'+(r.ct||0):'—'}</td>
-    <td class="muted">${esc(r.keyLabel||'—')}</td><td class="mono muted">${esc((r.rid||'').slice(0,8))}</td></tr>`).join('')
-    ||'<tr><td colspan="9" class="muted" style="padding:12px">暂无记录</td></tr>';
+async function saveCiCfg(){
+  await admin('/admin/api/config',{method:'PATCH',body:JSON.stringify({
+    autoCheckin:$('#autoCi').checked,checkinHour:Number($('#ciHour').value)||0,
+    keepAliveHours:Number($('#ciKeep').value)||6})});
+  await refresh();
 }
-$('#reloadLogs').onclick=loadLogs;
+$('#autoCi').onchange=saveCiCfg;
+$('#ciHour').onchange=saveCiCfg;
+$('#ciKeep').onchange=saveCiCfg;
 
-/* ── OpenAI 调用（测试区） ── */
-$('#apiKey').value=sessionStorage.getItem('m2a_apikey')||'';
-$('#saveApiKey').onclick=()=>{sessionStorage.setItem('m2a_apikey',$('#apiKey').value.trim());loadModels();};
-const apiHeaders=()=>{const k=$('#apiKey').value.trim();return {'Content-Type':'application/json',...(k?{Authorization:'Bearer '+k}:{})};};
-const baseV1=location.origin+'/v1';
-let lastReq=null,lastRes=null;
-async function callApi(path,body,{stream=false}={}){
-  lastReq={path,body};
-  const t0=performance.now();
-  const r=await fetch(baseV1+path,{method:body?'POST':'GET',headers:apiHeaders(),...(body?{body:JSON.stringify(body)}:{})});
-  if(stream)return {r,t0};
-  const txt=await r.text();let d;try{d=JSON.parse(txt);}catch{d={raw:txt};}
-  lastRes=d;
-  if(!r.ok)throw new Error(d?.error?.message||('HTTP '+r.status));
-  return {data:d,ms:Math.round(performance.now()-t0)};
-}
-async function loadModels(){
-  try{
-    const {data}=await callApi('/models');
-    const opts=data.data.filter(m=>!/[A-Z ]/.test(m.id)).map(m=>`<option value="${esc(m.id)}">${esc(m.id)}</option>`).join('');
-    $('#chatModel').innerHTML=opts;
-    const prefer='deepseek-v4.1-flash-1017';
-    if([...$('#chatModel').options].some(o=>o.value===prefer))$('#chatModel').value=prefer;
-  }catch(e){/* 未填 key */}
-}
-
-/* 对话 */
-$('#clearChat').onclick=()=>{$('#chatLog').innerHTML='';};
-$('#prompt').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey))$('#send').click();});
-$('#send').onclick=async()=>{
-  const text=$('#prompt').value.trim();if(!text)return;
-  const model=$('#chatModel').value;
-  bubble($('#chatLog'),'你',text,'user');$('#prompt').value='';
-  $('#send').disabled=true;$('#chatStat').textContent='请求中…';
-  try{
-    if($('#stream').checked){
-      const {r,t0}=await callApi('/chat/completions',{model,max_tokens:Number($('#mt').value)||800,temperature:Number($('#temp').value),stream:true,messages:[{role:'user',content:text}]},{stream:true});
-      const {d,b}=bubble($('#chatLog'),model+'（流式）','');
-      const rd=r.body.getReader(),dec=new TextDecoder();let buf='',out='',reason='',usage=null;
-      while(true){const {done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});let i;
-        while((i=buf.indexOf('\n\n'))!==-1){const ch=buf.slice(0,i);buf=buf.slice(i+2);
-          for(const line of ch.split('\n')){if(!line.startsWith('data:'))continue;const raw=line.slice(5).trim();if(raw==='[DONE]')continue;
-            try{const o=JSON.parse(raw),dl=o.choices?.[0]?.delta||{};
-              if(dl.content){out+=dl.content;b.textContent=out;$('#chatLog').scrollTop=1e9;}
-              if(dl.reasoning_content)reason+=dl.reasoning_content;if(o.usage)usage=o.usage;}catch{}}}}
-      if(reason){const det=document.createElement('details');det.innerHTML=`<summary>reasoning ${reason.length} 字</summary><pre>${esc(reason)}</pre>`;d.append(det);}
-      $('#chatStat').textContent=`${Math.round(performance.now()-t0)}ms`+(usage?` · tokens ${usage.prompt_tokens}/${usage.completion_tokens}`:'');
-    }else{
-      const {data,ms}=await callApi('/chat/completions',{model,max_tokens:Number($('#mt').value)||800,temperature:Number($('#temp').value),messages:[{role:'user',content:text}]});
-      const msg0=data.choices?.[0]?.message||{};
-      const host=bubble($('#chatLog'),data.model||model,(msg0.content||'').trim());
-      if(msg0.reasoning_content){
-        const det=document.createElement('details');
-        det.innerHTML=`<summary>reasoning ${msg0.reasoning_content.length} 字</summary><pre>${esc(msg0.reasoning_content)}</pre>`;
-        host.d.append(det);
-      }
-      $('#chatStat').textContent=`${ms}ms · tokens ${data.usage?.prompt_tokens}/${data.usage?.completion_tokens}`;
-    }
-  }catch(e){bubble($('#chatLog'),'错误',e.message);}
-  finally{$('#send').disabled=false;refresh();}
-};
-function bubble(host,who,body,cls=''){
-  const d=document.createElement('div');d.className='msg '+(cls||'');
-  const w=document.createElement('div');w.className='who';w.textContent=who;
-  const b=document.createElement('div');b.className='body';b.textContent=body??'';
-  d.append(w,b);host.append(d);host.scrollTop=host.scrollHeight;return {d,b};
-}
-
-/* 工具 */
-const TOOLS={
-  get_weather:{schema:{type:'function',function:{name:'get_weather',description:'查询城市当前天气',parameters:{type:'object',properties:{city:{type:'string'}},required:['city']}}},run:({city})=>({city,weather:'晴',temp:26,humidity:41,wind:'东北风 3 级'})},
-  get_time:{schema:{type:'function',function:{name:'get_time',description:'查询时区当前时间',parameters:{type:'object',properties:{timezone:{type:'string'}},required:['timezone']}}},run:({timezone})=>({timezone,time:new Date().toLocaleString('zh-CN',{timeZone:timezone||'Asia/Shanghai',hour12:false})})},
-  calc:{schema:{type:'function',function:{name:'calc',description:'四则运算',parameters:{type:'object',properties:{expression:{type:'string'}},required:['expression']}}},run:({expression})=>/^[\d\s+\-*/().%]+$/.test(expression)?{expression,result:Function('"use strict";return ('+expression+')')()}:{error:'只允许四则运算'}},
-};
-$('#runTools').onclick=async()=>{
-  const picked=$$('.tool:checked').map(x=>x.value);if(!picked.length)return;
-  const tools=picked.map(n=>TOOLS[n].schema), maxRounds=Math.max(1,Number($('#rounds').value)||3);
-  const model=$('#chatModel').value, log=$('#toolLog');
-  log.innerHTML='';$('#toolStat').textContent='运行中…';$('#runTools').disabled=true;
-  const messages=[{role:'user',content:$('#toolPrompt').value}];let hit=false,rounds=0;
-  try{
-    for(let i=1;i<=maxRounds;i++){
-      rounds=i;
-      const {data,ms}=await callApi('/chat/completions',{model,messages,tools,max_tokens:800});
-      const m=data.choices[0].message,fr=data.choices[0].finish_reason;
-      bubble(log,`第 ${i} 轮 · ${ms}ms · finish=${fr}`,m.content||'(无正文)');messages.push(m);
-      if(m.tool_calls?.length){
-        hit=true;
-        const det=document.createElement('details');
-        det.innerHTML=`<summary>tool_calls JSON</summary><pre>${esc(JSON.stringify(m.tool_calls,null,2))}</pre>`;
-        log.lastChild.append(det);
-        for(const tc of m.tool_calls){
-          let args={};try{args=JSON.parse(tc.function.arguments||'{}');}catch{}
-          const out=TOOLS[tc.function.name]?.run(args)||{error:'unknown'};
-          bubble(log,`本地执行 ${tc.function.name}(${tc.function.arguments})`,JSON.stringify(out,null,2),'result');
-          messages.push({role:'tool',tool_call_id:tc.id,content:JSON.stringify(out)});
-        }
-        continue;
-      }
-      bubble(log,'最终回答',(m.content||'').trim());break;
-    }
-    $('#toolStat').innerHTML=hit?`<span class="badge ok">工具调用正常</span> ${rounds} 轮`:'<span class="badge bad">未触发 tool_calls</span>';
-  }catch(e){bubble(log,'错误',e.message);$('#toolStat').innerHTML='<span class="badge bad">失败</span>';}
-  finally{$('#runTools').disabled=false;refresh();}
-};
-
-/* 隔离 */
-$('#runIso').onclick=async()=>{
-  const log=$('#isoLog'),model=$('#chatModel').value,secret=String(Math.floor(1000+Math.random()*9000));
-  log.innerHTML='';$('#isoVerdict').innerHTML='';$('#runIso').disabled=true;
-  try{
-    bubble(log,'第 1 次（独立 messages）',`记住暗号 ${secret}，只回 OK。`,'user');
-    const a=await callApi('/chat/completions',{model,max_tokens:600,messages:[{role:'user',content:`记住这个暗号：${secret}。只回 OK。`}]});
-    bubble(log,'响应 1',`prompt_tokens=${a.data.usage?.prompt_tokens} · ${(a.data.choices[0].message.content||'').trim()}`,'result');
-    bubble(log,'第 2 次（全新 messages）','刚才的暗号是什么？不知道就说不知道。','user');
-    const b=await callApi('/chat/completions',{model,max_tokens:600,messages:[{role:'user',content:'我刚才让你记的暗号是什么？只回数字，不知道就说不知道。'}]});
-    const t2=(b.data.choices[0].message.content||'').trim();
-    bubble(log,'响应 2',`prompt_tokens=${b.data.usage?.prompt_tokens} · ${t2}`,'result');
-    const leaked=t2.includes(secret);
-    $('#isoVerdict').innerHTML=`<div class="verdict"><b>${leaked?'<span class="badge bad">检测到串味</span>':'<span class="badge ok">无上下文泄漏</span>'}</b>
-      <div class="muted" style="margin-top:5px">暗号 ${secret} · 第 2 次 prompt_tokens=${b.data.usage?.prompt_tokens}（只含本次消息）</div></div>`;
-  }catch(e){bubble(log,'错误',e.message);}
-  finally{$('#runIso').disabled=false;}
-};
-
-/* ── 启动 ── */
 (async()=>{
   await refresh();
-  if(TOKEN){$('#login').classList.remove('on');}else{showLogin();}
-  await loadModels();
-  setInterval(async()=>{await refresh();},30000);
+  if(TOKEN)$('#login').classList.remove('on');else showLogin();
+  setInterval(refresh,30000);
 })();
 </script>
 </body>

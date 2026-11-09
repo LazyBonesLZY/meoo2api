@@ -226,12 +226,13 @@ func (s *Service) ProjectKey(a *model.Account, projectName string) (map[string]a
 		return map[string]any{"project": urlID, "stage": "environment",
 			"error": fmt.Sprintf("HTTP %d %s", code, strings.TrimSpace(string(raw)))}, nil
 	}
-	k := store.NewKey(a.Label+" / "+urlID, env.Data.Key, 1)
+	k := store.NewKey(urlID, env.Data.Key, 1)
 	k.Account = &model.Identity{ID: a.UserID, Name: a.Name, Kind: "key"}
 	k.AccountID = a.ID
 	s.St.Mu.Lock()
 	s.St.Data.Keys = append(s.St.Data.Keys, k)
 	a.ProjectKeyIDs = append(a.ProjectKeyIDs, k.ID)
+	a.KeyID = k.ID
 	s.St.Mu.Unlock()
 	s.St.Touch()
 	_ = s.St.Save()
@@ -262,6 +263,73 @@ func (s *Service) Onboard(a *model.Account) (map[string]any, error) {
 		out[k] = v
 	}
 	return out, nil
+}
+
+// Add 添加账号：识别 → 保活 → 个人 AK → 项目 AK 入池（一次完成）
+func (s *Service) Add(cookie string) (*model.Account, map[string]any, error) {
+	a := &model.Account{ID: model.RandID("a_", 6), Cookie: cookie, Enabled: true,
+		CreatedAt: time.Now().UnixMilli(), PersonalKeyIDs: []string{}, ProjectKeyIDs: []string{}}
+	out := map[string]any{}
+	probe := &model.Account{Cookie: cookie}
+	if err := s.Identify(probe); err == nil && probe.UserID != "" {
+		// 同一账号已存在 → 只更新 Cookie
+		s.St.Mu.Lock()
+		for _, x := range s.St.Data.Accounts {
+			if x.UserID == probe.UserID {
+				x.Cookie = cookie
+				x.Name = probe.Name
+				a = x
+				break
+			}
+		}
+		s.St.Mu.Unlock()
+	}
+	s.St.Mu.Lock()
+	found := false
+	for _, x := range s.St.Data.Accounts {
+		if x.ID == a.ID {
+			found = true
+		}
+	}
+	if !found {
+		s.St.Data.Accounts = append(s.St.Data.Accounts, a)
+	}
+	s.St.Mu.Unlock()
+
+	if err := s.Identify(a); err != nil {
+		// 识别失败也保留账号，但报错
+		_ = s.St.Save()
+		return a, out, err
+	}
+	ok, _ := s.Ping(a)
+	out["session"] = ok
+	out["key"] = s.keyInfo(a)
+	if a.KeyID != "" {
+		// 已有 API Key，只刷新登录态
+		_ = s.St.Save()
+		return a, out, nil
+	}
+	if _, err := s.PersonalKey(a); err != nil {
+		_ = s.St.Save()
+		return a, out, fmt.Errorf("创建个人 AK 失败: %w", err)
+	}
+	proj, err := s.ProjectKey(a, "meoo2api-"+strings.ToLower(model.RandID("", 3)))
+	for k, v := range proj {
+		out[k] = v
+	}
+	_ = s.St.Save()
+	return a, out, err
+}
+
+func (s *Service) keyInfo(a *model.Account) string {
+	s.St.Mu.RLock()
+	defer s.St.Mu.RUnlock()
+	for _, k := range s.St.Data.Keys {
+		if k.ID == a.KeyID {
+			return model.Mask(k.Key)
+		}
+	}
+	return ""
 }
 
 func (s *Service) personalAKOf(a *model.Account) string {

@@ -56,17 +56,7 @@ func (h *Handler) resolveCaller(r *http.Request) (caller, string) {
 	if strings.HasPrefix(tok, "meoo_ak_") {
 		return caller{}, "个人 AK 不能调用模型网关，请用项目服务 AK（meoo_project_…）"
 	}
-	h.St.Mu.RLock()
-	defer h.St.Mu.RUnlock()
-	for _, c := range h.St.Data.ClientKeys {
-		if c.Enabled && c.Key == tok {
-			return caller{Label: c.Label}, ""
-		}
-	}
-	if len(h.St.Data.Keys) == 0 && len(h.St.Data.ClientKeys) == 0 {
-		return caller{}, "服务未配置 key（控制台添加或使用 BYOK）"
-	}
-	return caller{}, "无效的 API key"
+	return caller{}, "无效的 API key：请用账号页里的项目 AK（meoo_project_…）"
 }
 
 func (h *Handler) resolveModel(m string) string {

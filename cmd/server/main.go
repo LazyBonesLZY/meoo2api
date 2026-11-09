@@ -105,19 +105,19 @@ func main() {
 	st.Mu.RLock()
 	fmt.Printf("meoo2api  http://%s:%d/\n", *bind, *port)
 	fmt.Printf("  upstream %s\n", base)
-	fmt.Printf("  keys     %d 池内 / %d 客户端 / %d 签到\n", len(st.Data.Keys), len(st.Data.ClientKeys), len(st.Data.Checkins))
+	fmt.Printf("  accounts %d 个 / API Key %d 个\n", len(st.Data.Accounts), len(st.Data.Keys))
 	st.Mu.RUnlock()
 	log.Fatal(srv.ListenAndServe())
 }
 
 func health(w http.ResponseWriter, st *store.Store, picker *pool.Picker, base string) {
 	st.Mu.RLock()
-	total, clients, checkins := len(st.Data.Keys), len(st.Data.ClientKeys), len(st.Data.Checkins)
+	total, accounts := len(st.Data.Keys), len(st.Data.Accounts)
 	st.Mu.RUnlock()
 	usable := len(picker.Usable())
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	fmt.Fprintf(w, `{"ok":true,"upstream":%q,"byok":true,"keys":%d,"usable":%d,"clientKeys":%d,"checkins":%d,"alerts":%v}`,
-		base, total, usable, clients, checkins, st.Alerts())
+	fmt.Fprintf(w, `{"ok":true,"upstream":%q,"keys":%d,"usable":%d,"accounts":%d,"alerts":%v}`,
+		base, total, usable, accounts, st.Alerts())
 }
 
 func splitList(v string) []string {

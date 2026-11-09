@@ -110,7 +110,10 @@ func (p *Picker) Probe(k *model.Key) model.Health {
 	}
 	p.St.Mu.Lock()
 	k.Health = h
-	if h.State == "invalid" {
+	switch h.State {
+	case "ok":
+		k.CooldownUntil = 0
+	case "invalid":
 		k.CooldownUntil = time.Now().UnixMilli() + int64(p.St.Data.Config.HardCooldownSec)*1000
 	}
 	p.St.Mu.Unlock()
