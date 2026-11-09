@@ -6,7 +6,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=%h/meoo2api
-ExecStart=/usr/bin/node %h/meoo2api/meoo2api.mjs
+ExecStart=%h/meoo2api/meoo2api
+Environment=HOME=%h
 Restart=always
 RestartSec=3
 StandardOutput=journal

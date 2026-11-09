@@ -1,6 +1,6 @@
 # meoo2api
 
-把 Meoo 模型网关包装成 OpenAI 兼容 API，自带测试用 WebUI，零依赖。
+把 Meoo 模型网关包装成 OpenAI 兼容 API，自带管理控制台。**Go 实现，单二进制，零外部依赖**。
 
 ```
 浏览器 / OpenAI 客户端 → http://127.0.0.1:8791 → https://api.meoo.host/meoo-ai/compatible-mode/v1
@@ -12,11 +12,13 @@
 服务端不保存这把 key、不跨请求复用。
 
 ```bash
-node meoo2api.mjs                 # 什么都不用配
-open http://127.0.0.1:8791/       # WebUI 里粘一把项目 AK 就能测
+./meoo2api                        # 什么都不用配
+open http://127.0.0.1:8791/       # 控制台里粘一把项目 AK 就能测
 ```
 
 **固定 key**：`MEOO2API_KEYS` 是你的客户端 key，`MEOO_PROJECT_AK` 是服务端统一持有的项目 AK。
+
+早期 Node 实现保留在 `nodejs/`，功能与 Go 版一致。
 
 ## 端点
 
@@ -31,12 +33,26 @@ open http://127.0.0.1:8791/       # WebUI 里粘一把项目 AK 就能测
 | POST | `/v1/responses` | Responses API 最小实现 |
 | POST | `/v1/embeddings` 等 | 上游无此能力，返回 404 `unsupported_endpoint` |
 
-## 快速开始
+## 构建与运行
 
 ```bash
 git clone https://github.com/LazyBonesLZY/meoo2api.git && cd meoo2api
-node meoo2api.mjs          # BYOK 模式，无需配置
-# 或固定 key：cp .env.example .env 后填 MEOO_PROJECT_AK / MEOO2API_KEYS
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o meoo2api .
+./meoo2api                       # BYOK 模式，无需配置
+./meoo2api -port 8791 -bind 0.0.0.0 -data /var/lib/meoo2api
+```
+
+管理密码在**首次启动时打印一次**（只存 SHA-256，不落盘）；`--reset-password` 重新生成。
+
+WebUI 用 `go:embed` 打进二进制，不需要额外静态文件。
+
+## 目录
+
+```
+main.go state.go pool.go upstream.go openai.go admin.go checkin.go   Go 服务端
+webui.html                                                         控制台（embed）
+login.mjs                                                          浏览器登录取 Cookie
+nodejs/                                                            早期 Node 实现（保留）
 ```
 
 ```bash
@@ -178,9 +194,17 @@ Meoo 网关是阿里系的 OpenAI 兼容实现，本层补齐了这些地方：
 ## 部署
 
 ```bash
+CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o meoo2api .
 cp meoo2api.service.example ~/.config/systemd/user/meoo2api.service
 systemctl --user daemon-reload
 systemctl --user enable --now meoo2api
+systemctl --user status meoo2api
+```
+
+跨架构交叉编译：
+
+```bash
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o meoo2api-arm64 .
 ```
 
 服务默认只绑 `127.0.0.1`，跨机访问建议 `ssh -L 8791:127.0.0.1:8791 host`，或自行加反向代理鉴权。

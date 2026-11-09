@@ -1,7 +1,8 @@
+data/
+nodejs/data/
+meoo2api
+meoo2api-*
+*.log
 .env
 .env.*
 !.env.example
-*.log
-node_modules/
-data/
-data
