@@ -9,8 +9,10 @@ import (
 
 func randomPassword() string {
 	b := make([]byte, 9)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic("crypto/rand: " + err.Error())
+	}
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-func hashPassword(pw string) string { return model.ShaHex(pw) }
+func hashPassword(pw string) string { return model.HashPassword(pw) }

@@ -1,7 +1,9 @@
 data/
-nodejs/data/
+bin/
 meoo2api
 meoo2api-*
+*.test
+coverage.out
 *.log
 .env
 .env.*

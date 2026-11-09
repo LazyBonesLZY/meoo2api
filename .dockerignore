@@ -1,0 +1,10 @@
+data/
+bin/
+.git/
+.env
+.env.*
+*.log
+*.tar.gz
+coverage.out
+meoo2api
+meoo2api-*

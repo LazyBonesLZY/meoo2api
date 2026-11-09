@@ -38,7 +38,6 @@ type Key struct {
 	Key           string    `json:"key"`
 	Enabled       bool      `json:"enabled"`
 	Weight        int       `json:"weight"`
-	Note          string    `json:"note"`
 	CreatedAt     int64     `json:"createdAt"`
 	Health        Health    `json:"health"`
 	Stats         Stats     `json:"stats"`
@@ -87,6 +86,7 @@ type Account struct {
 	PersonalKeyIDs []string     `json:"personalKeyIds"`
 	ProjectKeyIDs  []string     `json:"projectKeyIds"`
 	KeyID          string       `json:"keyId,omitempty"`
+	ProjectID      string       `json:"projectId,omitempty"`
 	Points         int64        `json:"points"`
 	PointsAt       int64        `json:"pointsAt"`
 }
@@ -129,7 +129,6 @@ type Config struct {
 	AdminUser        string            `json:"adminUser"`
 	AdminPass        string            `json:"adminPass"`
 	AutoCheckin      bool              `json:"autoCheckin"`
-	AutoOnboard      bool              `json:"autoOnboard"`
 	CheckinHour      int               `json:"checkinHour"`
 	KeepAliveHours   int               `json:"keepAliveHours"`
 }
@@ -165,7 +164,7 @@ type State struct {
 	Config       Config             `json:"config"`
 	Keys         []*Key             `json:"keys"`
 	ClientKeys   []*ClientKey       `json:"clientKeys"`
-	Checkins     []*Checkin         `json:"checkins"`
+	Checkins     []*Checkin         `json:"checkins,omitempty"`
 	Accounts     []*Account         `json:"accounts"`
 	PersonalKeys []*PersonalKey     `json:"personalKeys"`
 	Logs         []*LogRow          `json:"logs"`
@@ -197,7 +196,9 @@ func DefaultAliases() map[string]string {
 
 func RandID(prefix string, n int) string {
 	b := make([]byte, n)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic("crypto/rand: " + err.Error())
+	}
 	return prefix + hex.EncodeToString(b)
 }
 
@@ -207,8 +208,11 @@ func ShaHex(s string) string {
 }
 
 func Mask(k string) string {
+	if k == "" {
+		return ""
+	}
 	if len(k) <= 18 {
-		return k
+		return "••••"
 	}
 	return k[:14] + "…" + k[len(k)-4:]
 }

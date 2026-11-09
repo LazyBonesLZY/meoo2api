@@ -56,7 +56,7 @@ th{color:var(--dim);font-weight:500;font-size:11.5px;white-space:nowrap}
 .login .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;width:min(420px,92vw)}
 .login h3{margin:0 0 12px;font-size:15px}
 pre{background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding:9px;overflow:auto;font-size:11.5px}
-@media(max-width:760px){.nav{display:none}}
+@media(max-width:760px){.shell{display:block}.nav{width:100%;height:auto;position:static;display:flex;flex-wrap:wrap;gap:3px}.nav .brand{width:100%;padding-bottom:5px}.nav button{width:auto;flex:1 1 auto;white-space:nowrap}.nav .foot{display:none}.topbar{padding:10px}.views{padding:12px 10px}}
 </style>
 </head>
 <body>
@@ -107,11 +107,11 @@ pre{background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding
       <!-- 账号管理 -->
       <section class="view" id="v-accounts">
         <h2>账号管理</h2>
-        <div class="sub">添加账号时自动：识别账号 → 建个人 AK → 建项目 → 开云服务 → 取项目 AK 入池</div>
+        <div class="sub">接入账号会创建个人 AK、项目及云服务；已有账号复用凭证与项目，失败后可重试接入</div>
         <div class="row">
           <button class="btn primary" id="openAdd">+ 添加账号</button>
           <label class="chk"><input type="checkbox" id="autoCi"> 每天 <input id="ciHour" type="number" min="0" max="23" value="0" style="width:52px"> 点后签到</label>
-          <label class="chk">保活每 <input id="ciKeep" type="number" min="1" max="48" value="6" style="width:52px"> 小时</label>
+          <label class="chk">保活每 <input id="ciKeep" type="number" min="0" max="168" value="6" style="width:52px"> 小时（0 关闭）</label>
           <span class="muted" id="accStat"></span>
         </div>
         <div class="panel" style="padding:0;overflow:auto">
@@ -154,7 +154,7 @@ pre{background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding
         <h2>设置</h2><div class="sub">保存即生效</div>
         <div class="panel">
           <div class="row">
-            <span class="muted">默认 max_tokens <input id="cfgMt" type="number" style="width:96px"></span>
+            <span class="muted">默认 max_tokens <input id="cfgMt" type="number" min="0" max="262144" style="width:96px">（0 跟随上游，不额外限长）</span>
             <span class="muted">上游超时(ms) <input id="cfgTimeout" type="number" style="width:110px"></span>
             <label class="chk"><input type="checkbox" id="cfgSticky"> 粘性（同一 API Key 优先复用）</label>
           </div>
@@ -166,12 +166,12 @@ pre{background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding
         </div>
         <div class="panel">
           <div class="row">
-            <input id="newPass" type="password" placeholder="新管理密码" style="width:220px">
+            <input id="newPass" type="password" autocomplete="new-password" minlength="12" maxlength="1024" placeholder="新管理密码（至少 12 位）" style="width:250px">
             <button class="btn" id="savePass">修改密码</button>
           </div>
         </div>
         <div class="panel">
-          <div class="row"><button class="btn" id="exportState">导出 state.json</button></div>
+          <div class="row"><button class="btn" id="exportState">导出脱敏概况</button><span class="muted">不含登录凭证、密钥明文和日志；非恢复备份</span></div>
         </div>
       </section>
     </div>
@@ -187,7 +187,7 @@ pre{background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding
   </div>
   <div id="devBox" style="display:none;margin-bottom:8px">
     <div class="muted">若没有自动弹出，手动打开：</div>
-    <pre id="devUrl" style="user-select:all"></pre>
+    <a id="devLink" target="_blank" rel="noopener noreferrer">点击打开授权页面</a><pre id="devUrl" style="user-select:all"></pre>
   </div>
   <details style="margin-top:6px">
     <summary class="muted">只有 Cookie？</summary>
@@ -200,6 +200,18 @@ pre{background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding
   <div class="muted" id="addMsg"></div>
 </div></div>
 
+<div class="login" id="cookieModal" role="dialog" aria-modal="true" aria-labelledby="cookieTitle"><div class="box">
+  <h3 id="cookieTitle">补充 Cookie</h3>
+  <div class="muted" id="cookieAccount"></div>
+  <p class="muted">粘贴该账号在 meoo.com 登录后的完整 Cookie。保存时验证账号身份，仅更新登录态，用于签到与保活；不新建账号、项目或 Key。</p>
+  <textarea id="cookieInput" aria-label="Meoo Cookie" rows="5" maxlength="16384" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="name=value; name2=value2" style="width:100%;resize:vertical;padding:9px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);color:var(--fg);font:12px/1.5 var(--mono)"></textarea>
+  <div class="row" style="justify-content:flex-end;margin-top:8px">
+    <button class="btn" id="cookieCancel">取消</button>
+    <button class="btn primary" id="cookieSave">验证并保存</button>
+  </div>
+  <div class="muted" id="cookieMsg" role="status" aria-live="polite"></div>
+</div></div>
+
 <div class="login" id="login"><div class="box">
   <h3>登录控制台</h3>
   <div class="row"><input id="lgUser" value="admin" style="width:100%"></div>
@@ -208,309 +220,6 @@ pre{background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding
   <div class="muted" id="lgMsg" style="margin-top:8px"></div>
 </div></div>
 
-<script>
-const $=(s)=>document.querySelector(s), $$=(s)=>[...document.querySelectorAll(s)];
-const esc=(s)=>String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-let TOKEN=sessionStorage.getItem('m2a_admin')||'', SNAP=null;
-
-async function admin(path,opts={}){
-  const r=await fetch(location.origin+path,{...opts,headers:{'Content-Type':'application/json','Authorization':'Bearer '+TOKEN,...(opts.headers||{})}});
-  if(r.status===401){showLogin();throw new Error('需要登录');}
-  const d=await r.json().catch(()=>({}));
-  if(!r.ok)throw new Error(d.error?.message||d.error||('HTTP '+r.status));
-  return d;
-}
-function showLogin(){$('#login').classList.add('on');}
-$('#lgBtn').onclick=async()=>{
-  const r=await fetch(location.origin+'/admin/api/login',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({username:$('#lgUser').value.trim(),password:$('#lgPass').value})});
-  const d=await r.json();
-  if(!r.ok){$('#lgMsg').textContent=d.error||'登录失败';return;}
-  TOKEN=d.token;sessionStorage.setItem('m2a_admin',TOKEN);
-  $('#login').classList.remove('on');await refresh();
-};
-$('#lgPass').addEventListener('keydown',e=>{if(e.key==='Enter')$('#lgBtn').click();});
-$('#logout').onclick=()=>{TOKEN='';sessionStorage.removeItem('m2a_admin');showLogin();};
-
-$$('.nav button[data-view]').forEach(b=>b.onclick=()=>{
-  $$('.nav button[data-view]').forEach(x=>x.classList.toggle('on',x===b));
-  $$('.view').forEach(v=>v.classList.toggle('on',v.id==='v-'+b.dataset.view));
-  if(b.dataset.view==='logs')loadLogs();
-  if(b.dataset.view==='apikeys')renderApiKeys();
-});
-document.documentElement.dataset.theme=localStorage.getItem('m2a_theme')||'dark';
-$('#theme').onclick=()=>{const t=document.documentElement.dataset.theme==='dark'?'light':'dark';
-  document.documentElement.dataset.theme=t;localStorage.setItem('m2a_theme',t);};
-
-async function refresh(){
-  try{
-    const h=await (await fetch(location.origin+'/healthz')).json();
-    $('#pHealth').className='pill '+(h.usable>0?'ok':'bad');
-    $('#pHealth').textContent=`API Key ${h.usable}/${h.keys}`;
-    $('#pKeys').textContent=`API Key ${h.usable}/${h.keys}`;
-    $('#fUp').textContent=(h.upstream||'').replace(/^https?:\/\//,'');
-    $('#fAcc').textContent=`账号 ${h.checkins??h.accounts??0}`;
-    $('#alerts').innerHTML=(h.alerts||[]).map(a=>`<div class="alert ${a.level}">● ${esc(a.text)}</div>`).join('');
-  }catch(e){$('#pHealth').className='pill bad';$('#pHealth').textContent='服务不可达';}
-  if(!TOKEN)return;
-  try{
-    SNAP=await admin('/admin/api/state');
-    renderAccounts(); renderApiKeys(); fillSettings(); await loadUsage();
-  }catch(e){}
-}
-
-function renderApiKeys(){
-  const list=(SNAP&&SNAP.apiKeys)||[];
-  $('#akBody').innerHTML=list.map(k=>`<tr data-id="${k.id}">
-    <td class="mono">${esc(k.key)}</td>
-    <td>${k.enabled?'<span class="badge ok">启用</span>':'<span class="badge">停用</span>'}</td>
-    <td class="mono">${k.stats?.req||0}</td>
-    <td class="mono">${new Date(k.createdAt).toLocaleString('zh-CN',{hour12:false})}</td>
-    <td>
-      <button class="btn sm" data-ak="copy">复制</button>
-      <button class="btn sm" data-ak="toggle">${k.enabled?'停用':'启用'}</button>
-      <button class="btn sm danger" data-ak="del">删除</button>
-    </td></tr>`).join('')
-    ||'<tr><td colspan="5" class="muted" style="padding:14px">还没有 API Key</td></tr>';
-  $('#akBody').querySelectorAll('button[data-ak]').forEach(b=>b.onclick=async()=>{
-    const id=b.closest('tr').dataset.id, act=b.dataset.ak, k=list.find(x=>x.id===id);
-    try{
-      if(act==='copy'){const r=await admin(`/admin/api/api-keys/${id}/reveal`);navigator.clipboard?.writeText(r.key);alert('已复制：'+r.key);return;}
-      if(act==='toggle')await admin(`/admin/api/api-keys/${id}`,{method:'PATCH',body:JSON.stringify({enabled:!k.enabled})});
-      if(act==='del'){if(!confirm('删除这个 API Key？'))return;await admin(`/admin/api/api-keys/${id}`,{method:'DELETE'});}
-      await refresh();
-    }catch(e){alert(e.message);}
-  });
-  $('#akStat').textContent=`${list.length} 个 · 启用 ${list.filter(k=>k.enabled).length}`;
-}
-$('#newApiKey').onclick=async()=>{
-  try{const r=await admin('/admin/api/api-keys',{method:'POST',body:'{}'});
-    navigator.clipboard?.writeText(r.key);
-    alert('已生成并复制：\n'+r.key);
-    await refresh();
-  }catch(e){alert(e.message);}
-};
-
-function keyBadge(a){
-  if(!a.key) return '<span class="badge warn">无 Key</span>';
-  const h=a.key.health;
-  if(a.key.cooldown>0) return `<span class="badge warn">冷却 ${a.key.cooldown}s</span>`;
-  if(h==='ok') return `<span class="badge ok">正常 ${a.key.latencyMs||0}ms</span>`;
-  if(h==='invalid') return '<span class="badge bad">鉴权失败</span>';
-  if(h==='error') return '<span class="badge bad">异常</span>';
-  return '<span class="badge">未探测</span>';
-}
-
-function renderAccounts(){
-  if(!SNAP)return;
-  const today=new Date().toISOString().slice(0,10);
-  const list=SNAP.accounts||[];
-  $('#accBody').innerHTML=list.map(a=>{
-    const done=a.lastGrantDate===today;
-    const session=a.expired?'<span class="badge bad">会话失效</span>'
-      :(a.lastPing?`<span class="badge ok">${new Date(a.lastPing).toLocaleTimeString('zh-CN',{hour12:false})}</span>`:'<span class="badge">未保活</span>');
-    return `<tr data-id="${a.id}">
-      <td>${a.name?`<div>${esc(a.name)}</div><div class="muted mono">${esc(a.userId||'')}</div>`:'<span class="muted">未识别</span>'}</td>
-      <td class="mono">${a.key?esc(a.key.key):'<span class="muted">—</span>'}</td>
-      <td>${keyBadge(a)}<div class="muted">${session}</div></td>
-      <td class="mono">${a.points??0}<div class="muted">${a.pointsAt?new Date(a.pointsAt).toLocaleTimeString('zh-CN',{hour12:false}):'—'}</div></td>
-      <td>${done?'<span class="badge ok">今日已签</span>':'<span class="badge warn">待签</span>'}
-          <div class="muted">累计 ${a.totalGranted||0}</div></td>
-      <td>
-        <button class="btn sm" data-act="copy">复制 Key</button>
-        <button class="btn sm" data-act="probe">探活</button>
-        <button class="btn sm" data-act="checkin">签到</button>
-        <button class="btn sm" data-act="ping">保活</button>
-        <button class="btn sm" data-act="cooldown">解除冷却</button>
-        <button class="btn sm" data-act="points">刷新积分</button>
-        <button class="btn sm danger" data-act="del">删除</button>
-      </td></tr>`;
-  }).join('') + (SNAP.orphanKeys||[]).map(k=>`<tr data-orphan="${k.id}">
-      <td><span class="muted">未绑定账号</span></td>
-      <td class="mono">${esc(k.key)}</td>
-      <td>${k.cooldown>0?`<span class="badge warn">冷却 ${k.cooldown}s</span>`:`<span class="badge ${k.health==='ok'?'ok':''}">${k.health==='ok'?'正常 '+(k.latencyMs||0)+'ms':k.health}</span>`}</td>
-      <td class="muted">—</td>
-      <td class="muted">—</td>
-      <td>
-        <button class="btn sm" data-orphan-act="copy">复制 Key</button>
-        <button class="btn sm danger" data-orphan-act="del">删除</button>
-      </td></tr>`).join('')
-    ||'<tr><td colspan="6" class="muted" style="padding:14px">还没有账号，点「+ 添加账号」</td></tr>';
-
-  $('#accBody').querySelectorAll('button[data-orphan-act]').forEach(b=>b.onclick=async()=>{
-    const tr=b.closest('tr'), id=tr.dataset.orphan, act=b.dataset.orphanAct;
-    try{
-      if(act==='copy'){const r=await admin(`/admin/api/state`);alert('未绑定 Key 请在号池数据中查看');}
-      if(act==='del'){if(!confirm('删除这个未绑定的 Key？'))return;
-        await fetch(location.origin+`/admin/api/orphan-keys/${id}`,{method:'DELETE',headers:{Authorization:'Bearer '+TOKEN}});
-        await refresh();}
-    }catch(e){alert(e.message);}
-  });
-
-  $('#accBody').querySelectorAll('button[data-act]').forEach(b=>b.onclick=async()=>{
-    const id=b.closest('tr').dataset.id, act=b.dataset.act;
-    b.disabled=true; const label=b.textContent; b.textContent='…';
-    try{
-      if(act==='copy'){const r=await admin(`/admin/api/accounts/${id}/key`);navigator.clipboard?.writeText(r.key);alert('已复制：'+r.key);}
-      if(act==='probe'){const r=await admin(`/admin/api/accounts/${id}/probe`,{method:'POST'});
-        alert(r.state==='ok'?`正常 ${r.latencyMs}ms`:'异常：'+(r.error||r.state));}
-      if(act==='checkin'){const r=await admin(`/admin/api/accounts/${id}/checkin`,{method:'POST'});
-        alert(r.ok?(r.granted?`签到成功 +${r.amount}`:'今日已领'):('失败：'+(r.error||'')));}
-      if(act==='cooldown'){await admin(`/admin/api/accounts/${id}/reset-cooldown`,{method:'POST'});alert('已解除冷却');}
-      if(act==='points'){const r=await admin(`/admin/api/accounts/${id}/points`,{method:'POST'});alert('积分：'+r.points);}
-      if(act==='ping'){const r=await admin(`/admin/api/accounts/${id}/ping`,{method:'POST'});
-        alert(r.ok?'会话有效':'失败：'+(r.error||''));}
-      if(act==='del'){if(!confirm('删除账号及其 API Key？'))return;await admin(`/admin/api/accounts/${id}`,{method:'DELETE'});}
-      await refresh();
-    }catch(e){alert(e.message);}
-    finally{b.disabled=false;b.textContent=label;}
-  });
-
-  $('#accStat').textContent=`${list.length} 个账号 · ${list.filter(a=>a.key).length} 个 API Key`;
-  $('#autoCi').checked=!!(SNAP.config.autoCheckin);
-  $('#ciHour').value=SNAP.config.checkinHour??0;
-  $('#ciKeep').value=SNAP.config.keepAliveHours||6;
-  $('#cAcc').textContent=list.length;
-  $('#cKey').textContent=list.filter(a=>a.key&&a.key.health==='ok').length;
-  $('#cCi').textContent=list.filter(a=>a.lastGrantDate===today).length;
-}
-
-$('#openAdd').onclick=()=>{$('#addModal').classList.add('on');};
-$('#addCancel').onclick=()=>{$('#addModal').classList.remove('on');};
-$('#devStart').onclick=async()=>{
-  $('#devStart').disabled=true;$('#devMsg').textContent='创建授权会话…';
-  try{
-    const r=await admin('/admin/api/device/start',{method:'POST',body:'{}'});
-    $('#devUrl').textContent=r.url;
-    $('#devBox').style.display='block';
-    window.open(r.url,'_blank','noopener');
-    $('#devMsg').textContent='等待授权…';
-    for(let i=0;i<100;i++){
-      await new Promise(x=>setTimeout(x,3000));
-      const st=await admin(`/admin/api/device/poll?sid=${encodeURIComponent(r.sessionId)}`);
-      if(st.status==='approved'){
-        $('#devMsg').innerHTML=`<span class="badge ok">已添加：${esc(st.name||st.userId)}</span>`+
-          (st.key?` <span class="mono">${esc(st.key)}</span>`:'')+
-          (st.points!==undefined?` <span class="badge">积分 ${st.points}</span>`:'')+
-          (st.error?` <span class="badge warn">${esc(st.error)}</span>`:'');
-        await refresh();
-        setTimeout(()=>{$('#addModal').classList.remove('on');$('#devBox').style.display='none';$('#devMsg').textContent='';},2500);
-        return;
-      }
-      if(st.status!=='pending'){ $('#devMsg').innerHTML=`<span class="badge bad">${esc(st.status)}</span>`; return; }
-    }
-    $('#devMsg').textContent='等待超时';
-  }catch(e){$('#devMsg').innerHTML=`<span class="badge bad">${esc(e.message)}</span>`;}
-  finally{$('#devStart').disabled=false;}
-};
-$('#devLoginFirst').onclick=()=>window.open('https://meoo.com/','_blank','noopener');
-$('#addCancel').onclick=()=>$('#addModal').classList.remove('on');
-$('#addOk').onclick=async()=>{
-  const cookie=$('#addCookie').value.trim();
-  if(!cookie){$('#addMsg').textContent='先粘贴 Cookie';return;}
-  $('#addOk').disabled=true;$('#addMsg').textContent='添加中…';
-  try{
-    const r=await admin('/admin/api/accounts',{method:'POST',body:JSON.stringify({cookie})});
-    $('#addMsg').innerHTML=`<span class="badge ok">${esc(r.name||r.id)}</span>`;
-    $('#addCookie').value='';await refresh();
-  }catch(e){$('#addMsg').innerHTML=`<span class="badge bad">${esc(e.message)}</span>`;}
-  finally{$('#addOk').disabled=false;}
-};
-
-$('#btnCheckinAll').onclick=async()=>{
-  $('#opStat').textContent='签到中…';
-  try{const r=await admin('/admin/api/accounts-checkin-all',{method:'POST'});
-    $('#opStat').textContent=`完成：${r.results.filter(x=>x.granted).length} 个到账`;await refresh();}
-  catch(e){$('#opStat').textContent=e.message;}
-};
-$('#btnProbeAll').onclick=async()=>{
-  $('#opStat').textContent='探活中…';
-  try{
-    const st=await admin('/admin/api/state');
-    let ok=0;
-    for(const a of st.accounts||[]){
-      if(!a.key)continue;
-      const r=await admin(`/admin/api/accounts/${a.id}/probe`,{method:'POST'});
-      if(r.state==='ok')ok++;
-    }
-    $('#opStat').textContent=`探活完成：${ok}/${(st.accounts||[]).filter(a=>a.key).length} 可用`;
-    await refresh();
-  }catch(e){$('#opStat').textContent=e.message;}
-};
-
-async function loadUsage(){
-  try{
-    const d=await admin('/admin/api/usage?hours=24');
-    $('#cReq').textContent=d.hours.reduce((a,h)=>a+h.req,0);
-  }catch{}
-  try{
-    const l=await admin('/admin/api/logs?limit=8');
-    $('#recentBody').innerHTML=l.rows.map(r=>`<tr>
-      <td class="mono">${new Date(r.ts).toLocaleTimeString('zh-CN',{hour12:false})}</td>
-      <td>${esc(r.model||'—')}</td>
-      <td><span class="badge ${r.status<400?'ok':'bad'}">${r.status}</span></td>
-      <td class="mono">${r.ms}ms</td><td class="muted">${esc(r.keyLabel||'—')}</td></tr>`).join('')
-      ||'<tr><td colspan="5" class="muted" style="padding:12px">暂无请求</td></tr>';
-  }catch{}
-}
-
-async function loadLogs(){
-  const st=$('#logStatus').value,q=$('#logQ').value.trim();
-  try{
-    const d=await admin(`/admin/api/logs?limit=200&status=${st}&q=${encodeURIComponent(q)}`);
-    $('#logCount').textContent=`${d.total} 条`;
-    $('#logBody').innerHTML=d.rows.map(r=>`<tr>
-      <td class="mono">${new Date(r.ts).toLocaleString('zh-CN',{hour12:false})}</td>
-      <td>${esc(r.method)}</td><td class="mono">${esc(r.path)}</td><td>${esc(r.model||'—')}</td>
-      <td><span class="badge ${r.status<400?'ok':'bad'}">${r.status}</span></td>
-      <td class="mono">${r.ms}ms</td><td class="mono">${r.pt||r.ct?(r.pt||0)+'/'+(r.ct||0):'—'}</td>
-      <td class="muted">${esc(r.keyLabel||'—')}</td></tr>`).join('')
-      ||'<tr><td colspan="8" class="muted" style="padding:12px">暂无记录</td></tr>';
-  }catch(e){}
-}
-$('#reloadLogs').onclick=loadLogs;
-
-function fillSettings(){
-  if(!SNAP)return;
-  const c=SNAP.config;
-  $('#cfgMt').value=c.defaultMaxTokens;
-  $('#cfgTimeout').value=c.timeoutMs;
-  $('#cfgSticky').checked=!!c.sticky;
-  $('#cfgCool').value=c.cooldownSec;
-  $('#cfgHard').value=c.hardCooldownSec;
-}
-$('#saveCfg').onclick=async()=>{
-  try{await admin('/admin/api/config',{method:'PATCH',body:JSON.stringify({
-    defaultMaxTokens:Number($('#cfgMt').value),timeoutMs:Number($('#cfgTimeout').value),
-    sticky:$('#cfgSticky').checked,cooldownSec:Number($('#cfgCool').value),hardCooldownSec:Number($('#cfgHard').value)})});
-    $('#cfgStat').innerHTML='<span class="badge ok">已保存</span>';await refresh();
-  }catch(e){$('#cfgStat').innerHTML='<span class="badge bad">'+esc(e.message)+'</span>';}
-};
-$('#savePass').onclick=async()=>{
-  if(!$('#newPass').value)return;
-  try{await admin('/admin/api/config',{method:'PATCH',body:JSON.stringify({adminPassword:$('#newPass').value})});
-    alert('已修改，请重新登录');location.reload();}catch(e){alert(e.message);}
-};
-$('#exportState').onclick=async()=>{
-  const d=await admin('/admin/api/export');
-  const blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='meoo2api-state.json';a.click();
-};
-async function saveCiCfg(){
-  await admin('/admin/api/config',{method:'PATCH',body:JSON.stringify({
-    autoCheckin:$('#autoCi').checked,checkinHour:Number($('#ciHour').value)||0,
-    keepAliveHours:Number($('#ciKeep').value)||6})});
-  await refresh();
-}
-$('#autoCi').onchange=saveCiCfg;
-$('#ciHour').onchange=saveCiCfg;
-$('#ciKeep').onchange=saveCiCfg;
-
-(async()=>{
-  await refresh();
-  if(TOKEN)$('#login').classList.remove('on');else showLogin();
-  setInterval(refresh,30000);
-})();
-</script>
+<script>/*__CONSOLE_SCRIPT__*/</script>
 </body>
 </html>

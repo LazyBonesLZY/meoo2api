@@ -6,11 +6,15 @@ services:
     ports:
       - "8791:8791"
     volumes:
-      - ./data:/app/data
+      - meoo2api-data:/app/data
     environment:
       BIND: 0.0.0.0
       PORT: "8791"
       DATA_DIR: /app/data
+      TZ: Asia/Shanghai
       # MEOO_PROJECT_AK: meoo_project_xxx
       # MEOO2API_KEYS: sk-xxx
       # MEOO2API_ADMIN_PASSWORD: change-me
+
+volumes:
+  meoo2api-data:
