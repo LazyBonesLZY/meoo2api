@@ -434,7 +434,12 @@ async function runCheckin(c) {
     const data = d.data || {};
     const granted = Boolean(data.dailyLoginGranted);
     const amount = Number(data.dailyLoginGrantAmount || 0);
-    c.last = { at: Date.now(), ok: true, ms: Date.now() - t0, granted, amount, initialized: Boolean(data.initialized) };
+    c.last = {
+      at: Date.now(), ok: true, ms: Date.now() - t0, granted, amount,
+      initialized: Boolean(data.initialized),
+      skipReason: data.dailyLoginSkipReason || '',
+      balanceAfter: data.dailyLoginBalanceAfter ?? null,
+    };
     if (granted) {
       c.lastGrantDate = today();
       c.totalGranted = (c.totalGranted || 0) + amount;

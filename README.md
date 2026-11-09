@@ -121,6 +121,32 @@ Meoo 的每日登录积分（`daily_login`）不是 AK 能拿的：网页端打�
 在「每日签到」页粘贴 meoo.com 的 Cookie（F12 → Network → 任意请求的 Cookie 头），即可手动或自动领取。
 Cookie 存在 `data/state.json`（600），接口返回时只显示前 8 位。
 
+### 手机号登录（自动拿 Cookie）
+
+Meoo 登录走阿里云 SSO（`account.aliyun.com/sso/login.htm`，client_id=oneday），
+自己实现短信接口会撞 baxia 反爬，所以用浏览器代登：
+
+```bash
+node login.mjs                                   # 弹窗，手机号登录后自动抓 Cookie
+node login.mjs --headless                        # 复用已登录的 profile，无需人工
+node login.mjs --api http://127.0.0.1:8791 \
+  --password <管理密码> --label 主号              # 抓完直接写入控制台并签到
+```
+
+流程：`/api/auth/login_redirect` 拿到 SSO 地址 → 浏览器授权 → 回跳 `meoo.com/aliyunLogin` 种 Cookie
+→ CDP 读取并请求 `entitlement/init` 验证 → 写入签到账号。
+
+profile 默认 `~/.meoo-login-profile`，登录一次后有效期由阿里云会话决定；
+建议加个每日定时：
+
+```bash
+# crontab -e
+10 8 * * * cd ~/meoo2api && /usr/bin/node login.mjs --headless --api http://127.0.0.1:8791 --password '***' >> login.log 2>&1
+```
+
+`dailyLoginGranted=false` + `dailyLoginSkipReason=ALREADY_GRANTED_TODAY` 表示当天已领过，
+余额以 `/open/v1/cli-compat/account/points` 为准。
+
 ## 运行数据
 
 ```

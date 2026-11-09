@@ -573,12 +573,14 @@ function renderCheckins(){
     const badge = !last ? '<span class="badge">未运行</span>'
       : last.ok ? (last.granted?`<span class="badge ok">+${last.amount}</span>`:'<span class="badge">今日已领</span>')
       : `<span class="badge bad">${esc((last.error||'').slice(0,24))}</span>`;
+    const skip = last && last.ok && !last.granted && last.skipReason
+      ? `<span class="muted"> ${last.skipReason==='ALREADY_GRANTED_TODAY'?'今日已领':esc(last.skipReason)}</span>` : '';
     return `<tr data-id="${c.id}">
       <td><input value="${esc(c.label)}" data-f="label" style="width:110px;padding:3px 6px"></td>
       <td class="mono muted">${esc(c.cookie)}</td>
       <td>${todayGranted?'<span class="badge ok">已到账</span>':'<span class="badge warn">待领</span>'}</td>
       <td class="mono">${c.totalGranted||0}<span class="muted"> / ${c.grantCount||0}次</span></td>
-      <td>${badge}${last?`<span class="muted"> ${last.ms}ms</span>`:''}</td>
+      <td>${badge}${skip}${last?`<span class="muted"> ${last.ms}ms</span>`:''}</td>
       <td>
         <button class="btn sm" data-act="run">签到</button>
         <button class="btn sm" data-act="toggle">${c.enabled?'停用':'启用'}</button>
