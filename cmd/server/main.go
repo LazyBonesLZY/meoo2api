@@ -63,7 +63,7 @@ func main() {
 	checkin.StartScheduler(st, acc.Ping)
 	gw := &gateway.Handler{St: st, Picker: picker, Up: up}
 	adm := &admin.Handler{St: st, Picker: picker, Acc: acc,
-		Tokens: admin.NewTokens(), Import: admin.NewImportTokens(), Start: time.Now()}
+		Tokens: admin.NewTokens(), Start: time.Now()}
 	html := webui.Index()
 
 	inner := http.NewServeMux()

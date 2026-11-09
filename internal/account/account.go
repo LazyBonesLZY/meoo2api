@@ -5,12 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
 	"meoo2api/internal/model"
-	"meoo2api/internal/oauth"
 	"meoo2api/internal/store"
 	"meoo2api/internal/upstream"
 )
@@ -24,108 +22,6 @@ var AllScopes = []string{
 type Service struct {
 	St *store.Store
 	Up *upstream.Client
-}
-
-// bearer 返回可用的 Open API 凭证：优先 OAuth access（自动续期），其次个人 AK
-func (s *Service) bearer(a *model.Account) string {
-	s.St.Mu.RLock()
-	acc, ref, exp := a.OAuthAccess, a.OAuthRefresh, a.OAuthExp
-	s.St.Mu.RUnlock()
-	if ref == "" {
-		return s.personalAKOf(a)
-	}
-	if acc != "" && time.Now().Unix() < exp-60 {
-		return acc
-	}
-	t, err := oauth.Refresh(context.Background(), ref)
-	if err != nil {
-		return acc
-	}
-	s.St.Mu.Lock()
-	a.OAuthAccess, a.OAuthRefresh = t.Access, t.Refresh
-	a.OAuthExp = time.Now().Unix() + t.Expires
-	s.St.Mu.Unlock()
-	s.St.Touch()
-	_ = s.St.Save()
-	return t.Access
-}
-
-// AddOAuth 用 refresh_token 添加账号：验证 → 识别 → 查积分 → 建项目入池
-func (s *Service) AddOAuth(refresh string) (*model.Account, map[string]any, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	t, err := oauth.Refresh(ctx, refresh)
-	if err != nil {
-		return nil, nil, fmt.Errorf("refresh_token 无效: %w", err)
-	}
-	tmp := &model.Account{OAuthAccess: t.Access, OAuthRefresh: t.Refresh,
-		OAuthExp: time.Now().Unix() + t.Expires, OpenID: t.OpenID}
-	if err := s.Identify(tmp); err != nil {
-		return nil, nil, err
-	}
-	// 同账号去重
-	s.St.Mu.Lock()
-	var a *model.Account
-	for _, x := range s.St.Data.Accounts {
-		if x.UserID != "" && x.UserID == tmp.UserID {
-			a = x
-			a.OAuthAccess, a.OAuthRefresh, a.OAuthExp, a.OpenID = tmp.OAuthAccess, tmp.OAuthRefresh, tmp.OAuthExp, tmp.OpenID
-			a.Name = tmp.Name
-			break
-		}
-	}
-	if a == nil {
-		a = tmp
-		a.ID = model.RandID("a_", 6)
-		a.Enabled = true
-		a.CreatedAt = time.Now().UnixMilli()
-		a.PersonalKeyIDs, a.ProjectKeyIDs = []string{}, []string{}
-		s.St.Data.Accounts = append(s.St.Data.Accounts, a)
-	}
-	s.St.Mu.Unlock()
-
-	out := map[string]any{"userId": a.UserID, "name": a.Name, "auth": "oauth"}
-	if v, err := s.Points(a); err == nil {
-		out["points"] = v
-	}
-	if a.KeyID == "" {
-		proj, err := s.ProjectKey(a, "meoo2api-"+strings.ToLower(model.RandID("", 3)))
-		for k, v := range proj {
-			out[k] = v
-		}
-		_ = err
-	} else {
-		out["key"] = s.keyInfo(a)
-	}
-	_ = s.St.Save()
-	return a, out, nil
-}
-
-// SSOURL 取 Meoo 的 SSO 授权地址（不跟随跳转），供浏览器直接打开
-func (s *Service) SSOURL() (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		"https://meoo.com/api/auth/login_redirect?redirect=%2F", nil)
-	if err != nil {
-		return "", err
-	}
-	client := &http.Client{
-		Timeout: 15 * time.Second,
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	loc := resp.Header.Get("Location")
-	if loc == "" {
-		return "", fmt.Errorf("上游未返回 SSO 地址（HTTP %d）", resp.StatusCode)
-	}
-	return loc, nil
 }
 
 func (s *Service) Find(id string) *model.Account {
@@ -144,7 +40,7 @@ func (s *Service) Identify(a *model.Account) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	code, raw, err := s.Up.DoJSON(ctx, "GET", "https://meoo.com/open/v1/cli-compat/account/identity", nil,
-		map[string]string{"Authorization": "Bearer " + s.bearer(a), "X-Meoo-Client": "cli"})
+		map[string]string{"Authorization": "Bearer " + s.personalAKOf(a), "X-Meoo-Client": "cli"})
 	if err != nil {
 		return err
 	}
@@ -172,41 +68,6 @@ func (s *Service) Identify(a *model.Account) error {
 	s.St.Mu.Unlock()
 	s.St.Touch()
 	return nil
-}
-
-// IdentifyKey 用项目 AK 查账号（多数项目 AK 查不到，返回提示）
-func (s *Service) IdentifyKey(k *model.Key) (*model.Identity, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-	code, raw, err := s.Up.DoJSON(ctx, "GET", "https://meoo.com/open/v1/cli-compat/account/identity", nil,
-		map[string]string{"Authorization": "Bearer " + k.Key, "X-Meoo-Client": "cli"})
-	if err != nil {
-		return nil, err
-	}
-	var d struct {
-		Data struct {
-			UserID   string `json:"user_id"`
-			Name     string `json:"name"`
-			Username string `json:"username"`
-		} `json:"data"`
-	}
-	_ = json.Unmarshal(raw, &d)
-	if code != 200 || d.Data.UserID == "" {
-		if code == 401 {
-			return nil, fmt.Errorf("项目服务 AK 查不到账号（该接口只认个人 AK）；由账号一键接入时会自动绑定")
-		}
-		return nil, fmt.Errorf("识别失败 HTTP %d %s", code, strings.TrimSpace(string(raw)))
-	}
-	name := d.Data.Name
-	if name == "" {
-		name = d.Data.Username
-	}
-	id := &model.Identity{ID: d.Data.UserID, Name: name, Kind: "key"}
-	s.St.Mu.Lock()
-	k.Account = id
-	s.St.Mu.Unlock()
-	s.St.Touch()
-	return id, nil
 }
 
 // Ping 轻量请求，兼作会话保活
@@ -316,7 +177,7 @@ func (s *Service) PersonalKey(a *model.Account) (*model.PersonalKey, error) {
 
 // ProjectKey 用账号的个人 AK 建项目 → 开云服务 → 取项目 AK → 入号池
 func (s *Service) ProjectKey(a *model.Account, projectName string) (map[string]any, error) {
-	personalAK := s.bearer(a)
+	personalAK := s.personalAKOf(a)
 	if personalAK == "" {
 		return nil, fmt.Errorf("该账号没有可用凭证")
 	}

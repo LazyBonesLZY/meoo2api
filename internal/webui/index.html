@@ -180,25 +180,23 @@ pre{background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding
 
 <div class="login" id="addModal"><div class="box">
   <h3>添加账号</h3>
-  <div class="row" style="margin-bottom:6px">
-    <button class="btn primary" id="ssoBtn">打开 SSO 登录页</button>
-    <button class="btn" id="ssoTokenBtn">OAuth 登录（推荐）</button>
-    <span class="muted" id="ssoMsg">或直接粘贴 Cookie</span>
+  <div class="row">
+    <button class="btn primary" id="devStart">浏览器授权登录</button>
+    <span class="muted" id="devMsg">在弹出页面点「授权」即可，无需命令行</span>
   </div>
-  <div id="ssoBox" style="display:none;margin-bottom:8px">
-    <div class="muted">在任意一台有浏览器的机器上执行（会弹出 meoo 登录页）：</div>
-    <pre id="ssoCmd" style="user-select:all"></pre>
-    <button class="btn sm" id="ssoCopy">复制命令</button>
+  <div id="devBox" style="display:none;margin-bottom:8px">
+    <div class="muted">若没有自动弹出，手动打开：</div>
+    <pre id="devUrl" style="user-select:all"></pre>
   </div>
-  <div class="muted" style="margin-bottom:8px">
-    也可以手动取：浏览器登录 meoo.com → F12 → Network → 任意请求的 <code>Cookie</code> 头
-  </div>
-  <div class="row"><input id="addCookie" placeholder="粘贴 Cookie" style="width:100%;font-family:var(--mono);font-size:11.5px"></div>
-  <div class="row" style="justify-content:flex-end;margin-bottom:0">
-    <button class="btn" id="addCancel">取消</button>
-    <button class="btn primary" id="addOk">添加并自动接入</button>
-  </div>
-  <div class="muted" id="addMsg" style="margin-top:8px"></div>
+  <details style="margin-top:6px">
+    <summary class="muted">只有 Cookie？</summary>
+    <div class="row" style="margin-top:8px">
+      <input id="addCookie" placeholder="粘贴 meoo.com Cookie" style="width:100%;font-family:var(--mono);font-size:11.5px">
+    </div>
+    <div class="row"><button class="btn" id="addOk">用 Cookie 添加</button></div>
+  </details>
+  <div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn" id="addCancel">关闭</button></div>
+  <div class="muted" id="addMsg"></div>
 </div></div>
 
 <div class="login" id="login"><div class="box">
@@ -376,50 +374,43 @@ function renderAccounts(){
   $('#cCi').textContent=list.filter(a=>a.lastGrantDate===today).length;
 }
 
-$('#openAdd').onclick=()=>{$('#addModal').classList.add('on');$('#addCookie').focus();};
+$('#openAdd').onclick=()=>{$('#addModal').classList.add('on');};
 $('#addCancel').onclick=()=>{$('#addModal').classList.remove('on');};
-$('#ssoBtn').onclick=async()=>{
+$('#devStart').onclick=async()=>{
+  $('#devStart').disabled=true;$('#devMsg').textContent='创建授权会话…';
   try{
-    const u=await admin('/admin/api/sso/url');
-    window.open(u.url,'_blank','noopener');
-    $('#ssoMsg').textContent='已在新标签打开登录页，登录完成后回来粘贴 Cookie';
-  }catch(e){$('#ssoMsg').innerHTML='<span class="badge bad">'+esc(e.message)+'</span>';}
-};
-$('#ssoTokenBtn').onclick=async()=>{
-  try{
-    const before=(SNAP&&SNAP.accounts?SNAP.accounts.length:0);
-    const r=await admin('/admin/api/sso/token',{method:'POST',body:'{}'});
-    const cmd=`node login.mjs --oauth --api ${location.origin} --token ${r.token}`;
-    $('#ssoCmd').textContent=cmd;
-    $('#ssoBox').style.display='block';
-    $('#ssoMsg').textContent='等待本机登录完成后自动导入…';
-    navigator.clipboard?.writeText(cmd).catch(()=>{});
-    for(let i=0;i<60;i++){
-      await new Promise(s=>setTimeout(s,4000));
-      await refresh();
-      const now=SNAP&&SNAP.accounts?SNAP.accounts.length:0;
-      if(now>before){
-        $('#ssoMsg').innerHTML='<span class="badge ok">账号已导入</span>';
-        setTimeout(()=>{$('#addModal').classList.remove('on');$('#ssoBox').style.display='none';},1200);
+    const r=await admin('/admin/api/device/start',{method:'POST',body:'{}'});
+    $('#devUrl').textContent=r.url;
+    $('#devBox').style.display='block';
+    window.open(r.url,'_blank','noopener');
+    $('#devMsg').textContent='等待授权…';
+    for(let i=0;i<100;i++){
+      await new Promise(x=>setTimeout(x,3000));
+      const st=await admin(`/admin/api/device/poll?sid=${encodeURIComponent(r.sessionId)}`);
+      if(st.status==='approved'){
+        $('#devMsg').innerHTML=`<span class="badge ok">已添加：${esc(st.name||st.userId)}</span>`+
+          (st.key?` <span class="mono">${esc(st.key)}</span>`:'')+
+          (st.points!==undefined?` <span class="badge">积分 ${st.points}</span>`:'')+
+          (st.error?` <span class="badge warn">${esc(st.error)}</span>`:'');
+        await refresh();
+        setTimeout(()=>{$('#addModal').classList.remove('on');$('#devBox').style.display='none';$('#devMsg').textContent='';},2500);
         return;
       }
+      if(st.status!=='pending'){ $('#devMsg').innerHTML=`<span class="badge bad">${esc(st.status)}</span>`; return; }
     }
-    $('#ssoMsg').textContent='等待超时，可改用下方手动粘贴 Cookie';
-  }catch(e){$('#ssoMsg').innerHTML='<span class="badge bad">'+esc(e.message)+'</span>';}
+    $('#devMsg').textContent='等待超时';
+  }catch(e){$('#devMsg').innerHTML=`<span class="badge bad">${esc(e.message)}</span>`;}
+  finally{$('#devStart').disabled=false;}
 };
-$('#ssoCopy').onclick=()=>navigator.clipboard?.writeText($('#ssoCmd').textContent);
+$('#addCancel').onclick=()=>$('#addModal').classList.remove('on');
 $('#addOk').onclick=async()=>{
   const cookie=$('#addCookie').value.trim();
   if(!cookie){$('#addMsg').textContent='先粘贴 Cookie';return;}
-  $('#addOk').disabled=true;$('#addMsg').textContent='识别 → 建 Key → 开项目 → 入池，约 10 秒…';
+  $('#addOk').disabled=true;$('#addMsg').textContent='添加中…';
   try{
     const r=await admin('/admin/api/accounts',{method:'POST',body:JSON.stringify({cookie})});
-    $('#addMsg').innerHTML=r.key
-      ? `<span class="badge ok">完成</span> ${esc(r.name||'')} · API Key ${esc(r.key)} · 项目 ${esc(r.project||'')}`
-      : `<span class="badge warn">账号已添加，接入未完成</span> ${esc(r.error||'')}`;
-    $('#addCookie').value='';
-    await refresh();
-    setTimeout(()=>{$('#addModal').classList.remove('on');$('#addMsg').textContent='';},2500);
+    $('#addMsg').innerHTML=`<span class="badge ok">${esc(r.name||r.id)}</span>`;
+    $('#addCookie').value='';await refresh();
   }catch(e){$('#addMsg').innerHTML=`<span class="badge bad">${esc(e.message)}</span>`;}
   finally{$('#addOk').disabled=false;}
 };
