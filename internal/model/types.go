@@ -87,6 +87,10 @@ type Account struct {
 	PersonalKeyIDs []string     `json:"personalKeyIds"`
 	ProjectKeyIDs  []string     `json:"projectKeyIds"`
 	KeyID          string       `json:"keyId,omitempty"`
+	OAuthAccess    string       `json:"oauthAccess,omitempty"`
+	OAuthRefresh   string       `json:"oauthRefresh,omitempty"`
+	OAuthExp       int64        `json:"oauthExp,omitempty"`
+	OpenID         string       `json:"openid,omitempty"`
 	Points         int64        `json:"points"`
 	PointsAt       int64        `json:"pointsAt"`
 }

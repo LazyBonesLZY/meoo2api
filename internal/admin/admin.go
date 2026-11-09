@@ -129,6 +129,45 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) bool {
 		}
 		return true
 	}
+	if path == "/admin/api/oauth/import" && r.Method == http.MethodPost {
+		tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if !h.Import.use(tok) {
+			write(w, 401, map[string]any{"error": "导入令牌无效或已使用"})
+			return true
+		}
+		var in struct {
+			RefreshToken string `json:"refreshToken"`
+			Cookie       string `json:"cookie"`
+		}
+		readBody(r, &in)
+		if strings.TrimSpace(in.RefreshToken) == "" {
+			write(w, 400, map[string]any{"error": "缺少 refreshToken"})
+			return true
+		}
+		a, out, err := h.Acc.AddOAuth(strings.TrimSpace(in.RefreshToken))
+		if a != nil && strings.TrimSpace(in.Cookie) != "" {
+			h.St.Mu.Lock()
+			a.Cookie = strings.TrimSpace(in.Cookie)
+			h.St.Mu.Unlock()
+			_ = h.St.Save()
+			out["cookie"] = "已导入（可用于签到）"
+		}
+		if a == nil {
+			write(w, 400, map[string]any{"error": err.Error()})
+			return true
+		}
+		resp := map[string]any{"id": a.ID, "userId": a.UserID, "name": a.Name}
+		for k, v := range out {
+			resp[k] = v
+		}
+		if err != nil {
+			resp["error"] = err.Error()
+			write(w, 400, resp)
+			return true
+		}
+		write(w, 200, resp)
+		return true
+	}
 	if path == "/admin/api/sso/import" && r.Method == http.MethodPost {
 		tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if !h.Import.use(tok) {

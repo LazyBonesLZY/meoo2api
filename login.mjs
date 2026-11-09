@@ -17,6 +17,8 @@ const PROFILE = arg('profile', join(homedir(), '.meoo-login-profile'));
 const LABEL = arg('label', '手机号登录');
 const STDOUT_ONLY = flag('stdout');
 const IMPORT_TOKEN = arg('token', '');
+const USE_OAUTH = flag('oauth');
+const OAUTH_PORT = Number(arg('oauth-port', 18765));
 const API = (arg('api', '') || '').replace(/\/+$/, '');
 const ADMIN_PW = arg('password', process.env.MEOO2API_ADMIN_PASSWORD || '');
 const USE_SSO = !process.argv.includes('--no-sso');
@@ -129,7 +131,81 @@ async function checkCookie(cookie) {
   return { status: r.status, ok: Boolean(r.ok && d?.success), body: d };
 }
 
+async function readMeooCookie() {
+  for (let i = 0; i < 20; i++) {
+    try {
+      const list = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json();
+      const page = list.find((x) => x.type === 'page');
+      if (page) {
+        const ws = new WebSocket(page.webSocketDebuggerUrl);
+        await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error('ws')); });
+        const result = await new Promise((res) => {
+          ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.id === 1) res(m.result); };
+          ws.send(JSON.stringify({ id: 1, method: 'Network.getAllCookies' }));
+        });
+        ws.close();
+        const meoo = (result?.cookies || []).filter((c) => /(^|\.)meoo\.com$/.test(c.domain));
+        if (meoo.length) return meoo.map((c) => `${c.name}=${c.value}`).join('; ');
+      }
+    } catch {}
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return '';
+}
+
+async function oauthFlow() {
+  const { createHash, randomBytes } = await import('node:crypto');
+  const { createServer } = await import('node:http');
+  const b64 = (b) => b.toString('base64url');
+  const state = b64(randomBytes(32));
+  const verifier = b64(randomBytes(32));
+  const challenge = b64(createHash('sha256').update(verifier).digest());
+  const redirect = `http://127.0.0.1:${OAUTH_PORT}/oauth/callback`;
+  const u = new URL('https://meoo.com/oauth/authorize');
+  const q = { client_id: 'meoo_app_tdWlRbpvAxN1EjmZ8XICxdTh', redirect_uri: redirect,
+    response_type: 'code', scope: 'cli.compat', state, code_challenge: challenge, code_challenge_method: 'S256' };
+  for (const [k, v] of Object.entries(q)) u.searchParams.set(k, v);
+
+  const server = createServer(async (req, res) => {
+    const url = new URL(req.url, `http://127.0.0.1:${OAUTH_PORT}`);
+    if (url.pathname !== '/oauth/callback') { res.writeHead(404).end(); return; }
+    const code = url.searchParams.get('code');
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+       .end('<h2>登录完成</h2>可以关闭这个页面，回到终端查看结果。');
+    if (!code) { console.log(JSON.stringify({ ok: false, error: 'no code' })); process.exit(1); }
+    const body = new URLSearchParams({ grant_type: 'authorization_code',
+      client_id: 'meoo_app_tdWlRbpvAxN1EjmZ8XICxdTh', code, redirect_uri: redirect, code_verifier: verifier });
+    const r = await fetch('https://meoo.com/oauth/token', { method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+    const t = await r.json().catch(() => ({}));
+    if (!r.ok || !t.refresh_token) {
+      console.log(JSON.stringify({ ok: false, error: t.error || ('HTTP ' + r.status) }));
+      process.exit(1);
+    }
+    const cookie = await readMeooCookie();
+    if (IMPORT_TOKEN && API) {
+      const ir = await fetch(`${API}/admin/api/oauth/import`, { method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + IMPORT_TOKEN },
+        body: JSON.stringify({ refreshToken: t.refresh_token, cookie }) });
+      const j = await ir.json().catch(() => ({}));
+      console.log(JSON.stringify({ ok: ir.ok, imported: j, token: { scope: t.scope, expires_in: t.expires_in } }));
+    } else {
+      console.log(JSON.stringify({ ok: true, refreshToken: t.refresh_token, accessToken: t.access_token }));
+    }
+    process.exit(0);
+  });
+  server.listen(OAUTH_PORT, '127.0.0.1', () => {
+    log('打开浏览器授权：' + u.toString().slice(0, 120) + '…');
+    try {
+      spawn(CHROME, ['--user-data-dir=' + PROFILE, `--remote-debugging-port=${CDP_PORT}`,
+        '--no-first-run', u.toString()], { stdio: 'ignore', detached: true });
+    } catch (e) { log('请手动打开上面的地址'); }
+  });
+  setTimeout(() => { console.log(JSON.stringify({ ok: false, error: 'timeout' })); process.exit(2); }, TIMEOUT_MS);
+}
+
 (async () => {
+  if (USE_OAUTH) { await oauthFlow(); return; }
   log(`浏览器已启动（profile: ${PROFILE}）`);
   log('请在浏览器窗口里用手机号登录 meoo.com（验证码由阿里云发送）');
   await connect();

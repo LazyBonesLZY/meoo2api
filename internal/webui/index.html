@@ -182,7 +182,7 @@ pre{background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding
   <h3>添加账号</h3>
   <div class="row" style="margin-bottom:6px">
     <button class="btn primary" id="ssoBtn">打开 SSO 登录页</button>
-    <button class="btn" id="ssoTokenBtn">本机脚本登录</button>
+    <button class="btn" id="ssoTokenBtn">OAuth 登录（推荐）</button>
     <span class="muted" id="ssoMsg">或直接粘贴 Cookie</span>
   </div>
   <div id="ssoBox" style="display:none;margin-bottom:8px">
@@ -389,7 +389,7 @@ $('#ssoTokenBtn').onclick=async()=>{
   try{
     const before=(SNAP&&SNAP.accounts?SNAP.accounts.length:0);
     const r=await admin('/admin/api/sso/token',{method:'POST',body:'{}'});
-    const cmd=`node login.mjs --api ${location.origin} --token ${r.token}`;
+    const cmd=`node login.mjs --oauth --api ${location.origin} --token ${r.token}`;
     $('#ssoCmd').textContent=cmd;
     $('#ssoBox').style.display='block';
     $('#ssoMsg').textContent='等待本机登录完成后自动导入…';
