@@ -2,6 +2,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -62,11 +63,12 @@ func main() {
 	checkin.StartScheduler(st, acc.Ping)
 	gw := &gateway.Handler{St: st, Picker: picker, Up: up}
 	adm := &admin.Handler{St: st, Picker: picker, Acc: acc,
-		Tokens: admin.NewTokens(), Start: time.Now()}
+		Tokens: admin.NewTokens(), Import: admin.NewImportTokens(), Start: time.Now()}
 	html := webui.Index()
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	inner := http.NewServeMux()
+	mux := inner
+	handler := func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimRight(r.URL.Path, "/")
 		if path == "" {
 			path = "/"
@@ -99,9 +101,18 @@ func main() {
 			w.WriteHeader(404)
 			_, _ = w.Write([]byte(`{"error":{"message":"未知路径","type":"invalid_request_error","code":"unknown_url"}}`))
 		}
+	}
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		handler(&stateWriter{ResponseWriter: w}, r)
 	})
 
-	srv := &http.Server{Addr: fmt.Sprintf("%s:%d", *bind, *port), Handler: mux, ReadHeaderTimeout: 15 * time.Second}
+	srv := &http.Server{
+		Addr:              fmt.Sprintf("%s:%d", *bind, *port),
+		Handler:           mux,
+		ReadHeaderTimeout: 15 * time.Second,
+		ReadTimeout:       60 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
 	st.Mu.RLock()
 	fmt.Printf("meoo2api  http://%s:%d/\n", *bind, *port)
 	fmt.Printf("  upstream %s\n", base)
@@ -116,8 +127,33 @@ func health(w http.ResponseWriter, st *store.Store, picker *pool.Picker, base st
 	st.Mu.RUnlock()
 	usable := len(picker.Usable())
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	fmt.Fprintf(w, `{"ok":true,"upstream":%q,"keys":%d,"usable":%d,"accounts":%d,"alerts":%v}`,
-		base, total, usable, accounts, st.Alerts())
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok": true, "upstream": base, "keys": total, "usable": usable,
+		"accounts": accounts, "alerts": st.Alerts(),
+	})
+}
+
+const maxBodyBytes = 8 << 20 // 8MiB
+
+// headerSent 用 ResponseWriter 包装判断是否已写头
+type stateWriter struct {
+	http.ResponseWriter
+	wrote bool
+}
+
+func (w *stateWriter) WriteHeader(code int)        { w.wrote = true; w.ResponseWriter.WriteHeader(code) }
+func (w *stateWriter) Write(b []byte) (int, error) { w.wrote = true; return w.ResponseWriter.Write(b) }
+func (w *stateWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func headerSent(w http.ResponseWriter) bool {
+	if sw, ok := w.(*stateWriter); ok {
+		return sw.wrote
+	}
+	return false
 }
 
 func splitList(v string) []string {

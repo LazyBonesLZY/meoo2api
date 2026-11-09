@@ -58,11 +58,41 @@ func (t *Tokens) Clear() {
 	t.mu.Unlock()
 }
 
+type importTokens struct {
+	mu sync.Mutex
+	m  map[string]int64
+}
+
+func NewImportTokens() *importTokens { return &importTokens{m: map[string]int64{}} }
+
+func (t *importTokens) issue() string {
+	b := make([]byte, 12)
+	_, _ = rand.Read(b)
+	tok := hex.EncodeToString(b)
+	t.mu.Lock()
+	t.m[tok] = time.Now().Add(10 * time.Minute).UnixMilli()
+	t.mu.Unlock()
+	return tok
+}
+
+func (t *importTokens) use(tok string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	exp, ok := t.m[tok]
+	if !ok || exp < time.Now().UnixMilli() {
+		delete(t.m, tok)
+		return false
+	}
+	delete(t.m, tok)
+	return true
+}
+
 type Handler struct {
 	St     *store.Store
 	Picker *pool.Picker
 	Acc    *account.Service
 	Tokens *Tokens
+	Import *importTokens
 	Start  time.Time
 }
 
@@ -99,6 +129,31 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) bool {
 		}
 		return true
 	}
+	if path == "/admin/api/sso/import" && r.Method == http.MethodPost {
+		tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if !h.Import.use(tok) {
+			write(w, 401, map[string]any{"error": "导入令牌无效或已使用"})
+			return true
+		}
+		var in struct{ Cookie string }
+		readBody(r, &in)
+		if strings.TrimSpace(in.Cookie) == "" {
+			write(w, 400, map[string]any{"error": "缺少 Cookie"})
+			return true
+		}
+		a, out, err := h.Acc.Add(strings.TrimSpace(in.Cookie))
+		resp := map[string]any{"id": a.ID, "userId": a.UserID, "name": a.Name}
+		for k, v := range out {
+			resp[k] = v
+		}
+		if err != nil {
+			resp["error"] = err.Error()
+			write(w, 400, resp)
+			return true
+		}
+		write(w, 200, resp)
+		return true
+	}
 	if !h.Tokens.valid(r) {
 		write(w, 401, map[string]any{"error": "unauthorized"})
 		return true
@@ -117,6 +172,16 @@ func (h *Handler) route(w http.ResponseWriter, r *http.Request, path string) {
 		h.accountRoute(w, r, strings.TrimPrefix(path, "/admin/api/accounts/"))
 	case path == "/admin/api/accounts-checkin-all" && r.Method == http.MethodPost:
 		write(w, 200, map[string]any{"results": checkin.RunAll(h.St, true)})
+	case path == "/admin/api/sso/url" && r.Method == http.MethodGet:
+		u, err := h.Acc.SSOURL()
+		if err != nil {
+			write(w, 502, map[string]any{"error": err.Error()})
+			return
+		}
+		write(w, 200, map[string]any{"url": u})
+	case path == "/admin/api/sso/token" && r.Method == http.MethodPost:
+		tok := h.Import.issue()
+		write(w, 200, map[string]any{"token": tok, "expiresIn": 600})
 	case path == "/admin/api/api-keys":
 		h.apiKeysRoot(w, r)
 	case strings.HasPrefix(path, "/admin/api/api-keys/"):

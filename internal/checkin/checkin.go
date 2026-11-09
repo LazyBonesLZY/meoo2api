@@ -38,6 +38,13 @@ type Result struct {
 func Run(st *store.Store, a *model.Account) model.CheckinLast {
 	t0 := time.Now()
 	last := model.CheckinLast{At: t0.UnixMilli()}
+	if a.Cookie == "" {
+		last.Error = "该账号没有登录态 Cookie"
+		st.Mu.Lock()
+		a.Last = &last
+		st.Mu.Unlock()
+		return last
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)

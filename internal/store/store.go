@@ -106,6 +106,7 @@ func (s *Store) migrate() {
 			}
 		}
 	}
+	s.Data.Checkins = nil // 迁移完成后不再保留旧结构
 	// 账号补 KeyID
 	for _, a := range s.Data.Accounts {
 		if a.KeyID == "" && len(a.ProjectKeyIDs) > 0 {

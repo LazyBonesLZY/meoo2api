@@ -15,15 +15,18 @@ const flag = (n) => process.argv.includes('--' + n);
 const CDP_PORT = Number(arg('cdp-port', 9223));
 const PROFILE = arg('profile', join(homedir(), '.meoo-login-profile'));
 const LABEL = arg('label', '手机号登录');
+const STDOUT_ONLY = flag('stdout');
+const IMPORT_TOKEN = arg('token', '');
 const API = (arg('api', '') || '').replace(/\/+$/, '');
 const ADMIN_PW = arg('password', process.env.MEOO2API_ADMIN_PASSWORD || '');
 const USE_SSO = !process.argv.includes('--no-sso');
 const TIMEOUT_MS = Number(arg('timeout', 300000));
 
-const CHROME = ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser']
-  .find((b) => {
-    try { return Boolean(spawn('which', [b]).stdout); } catch { return false; }
-  }) || 'google-chrome';
+const CANDIDATES = ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium',
+  '/usr/bin/chromium-browser', '/snap/bin/chromium'];
+const CHROME = process.env.CHROME_BIN
+  || CANDIDATES.find((p) => existsSync(p))
+  || 'google-chrome';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (...a) => console.log(...a);
@@ -149,20 +152,35 @@ async function checkCookie(cookie) {
         const d = v.body?.data || {};
         log(`\n登录成功，Cookie 可用（${line.length} 字节）`);
         log(`  initialized=${d.initialized} dailyLoginGranted=${d.dailyLoginGranted} amount=${d.dailyLoginGrantAmount ?? '-'} skip=${d.dailyLoginSkipReason || '-'}`);
-        await handle(line, d);
-        if (!flag('keep')) { try { chrome.kill('SIGTERM'); } catch {} }
+        if (STDOUT_ONLY) {
+          console.log(JSON.stringify({ ok: true, cookie: line, granted: d.dailyLoginGranted, amount: d.dailyLoginGrantAmount }));
+        } else {
+          await handle(line, d);
+        }
+        try { chrome.kill('SIGTERM'); } catch {}
         process.exit(0);
       }
       if (v.status === 401) { await sleep(1500); continue; }
     }
     await sleep(1000);
   }
+  console.log(JSON.stringify({ ok: false, error: '等待超时，可能需要在浏览器里完成登录' }));
   console.error('等待超时，未拿到可用 Cookie');
   try { chrome.kill('SIGTERM'); } catch {}
   process.exit(2);
 })();
 
 async function handle(cookie, data) {
+  if (IMPORT_TOKEN) {
+    const r = await fetch(`${API}/admin/api/sso/import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + IMPORT_TOKEN },
+      body: JSON.stringify({ cookie }),
+    });
+    const j = await r.json().catch(() => ({}));
+    log(r.ok ? `已导入账号：${j.name || j.id}（${j.key || '无 Key'}）` : `导入失败：${j.error || r.status}`);
+    return;
+  }
   if (!API) {
     log('\n未指定 --api，Cookie 如下（自行粘贴到控制台）:');
     log(cookie);

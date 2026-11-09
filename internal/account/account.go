@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -22,6 +23,33 @@ var AllScopes = []string{
 type Service struct {
 	St *store.Store
 	Up *upstream.Client
+}
+
+// SSOURL 取 Meoo 的 SSO 授权地址（不跟随跳转），供浏览器直接打开
+func (s *Service) SSOURL() (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		"https://meoo.com/api/auth/login_redirect?redirect=%2F", nil)
+	if err != nil {
+		return "", err
+	}
+	client := &http.Client{
+		Timeout: 15 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	loc := resp.Header.Get("Location")
+	if loc == "" {
+		return "", fmt.Errorf("上游未返回 SSO 地址（HTTP %d）", resp.StatusCode)
+	}
+	return loc, nil
 }
 
 func (s *Service) Find(id string) *model.Account {

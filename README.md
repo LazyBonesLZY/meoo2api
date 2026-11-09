@@ -15,6 +15,25 @@ OpenAI 客户端 → http://host:8791/v1 → https://api.meoo.host/meoo-ai/compa
 
 调用方用 API Key；也支持直接带账号的项目 AK（BYOK），两者都行。
 
+## 添加账号（SSO）
+
+服务端不跑浏览器，三种方式任选：
+
+1. **打开 SSO 登录页**：控制台点「打开 SSO 登录页」，服务端把 `account.aliyun.com/sso/login.htm?...`
+   地址下发给你，浏览器直接登录；登录后从 meoo.com 的请求头里复制 `Cookie` 粘回控制台。
+2. **本机脚本**：控制台点「本机脚本登录」生成一次性令牌（10 分钟、用后即焚），
+   在任意有浏览器的机器上执行：
+
+   ```bash
+   node login.mjs --api http://<host>:8791 --token <token>
+   ```
+
+   脚本会开浏览器完成 SSO，拿到 Cookie 后回传，账号自动入库。
+3. **纯手工**：直接粘贴 Cookie。
+
+为什么不能全自动：会话 Cookie 的域是 `meoo.com`，跨域读不到；而阿里云登录页有滑块/短信校验，
+纯 HTTP 复现不可靠。服务端代理整站又会撞上绝对路径与 CDN 资源，所以把浏览器留在你这一侧最稳。
+
 ## 账号
 
 一个账号 = 一份网页登录态 + 一个项目 API Key（`meoo_project_…`）。这个 API Key 就是调用 `meoo2api` 的凭证，也是号池条目。
@@ -61,6 +80,25 @@ curl http://127.0.0.1:8791/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{"model":"deepseek v4.1 flash","messages":[{"role":"user","content":"hi"}],"max_tokens":600}'
 ```
+
+## 添加账号（SSO）
+
+服务端不跑浏览器，三种方式任选：
+
+1. **打开 SSO 登录页**：控制台点「打开 SSO 登录页」，服务端把 `account.aliyun.com/sso/login.htm?...`
+   地址下发给你，浏览器直接登录；登录后从 meoo.com 的请求头里复制 `Cookie` 粘回控制台。
+2. **本机脚本**：控制台点「本机脚本登录」生成一次性令牌（10 分钟、用后即焚），
+   在任意有浏览器的机器上执行：
+
+   ```bash
+   node login.mjs --api http://<host>:8791 --token <token>
+   ```
+
+   脚本会开浏览器完成 SSO，拿到 Cookie 后回传，账号自动入库。
+3. **纯手工**：直接粘贴 Cookie。
+
+为什么不能全自动：会话 Cookie 的域是 `meoo.com`，跨域读不到；而阿里云登录页有滑块/短信校验，
+纯 HTTP 复现不可靠。服务端代理整站又会撞上绝对路径与 CDN 资源，所以把浏览器留在你这一侧最稳。
 
 ## 账号与签到
 

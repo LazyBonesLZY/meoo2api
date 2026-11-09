@@ -313,6 +313,17 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 		Ms: time.Since(start).Milliseconds(), Model: resolved, KeyLabel: keyLabel, Byok: c.Byok != ""})
 }
 
+func (h *Handler) bumpClientKey(c caller) {
+	if c.ClientKey == nil {
+		return
+	}
+	h.St.Mu.Lock()
+	c.ClientKey.Stats.Req++
+	c.ClientKey.Stats.OK++
+	c.ClientKey.Stats.LastUsed = time.Now().UnixMilli()
+	h.St.Mu.Unlock()
+}
+
 func (h *Handler) timeout() time.Duration {
 	h.St.Mu.RLock()
 	defer h.St.Mu.RUnlock()
