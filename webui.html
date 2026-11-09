@@ -87,6 +87,7 @@ details summary{cursor:pointer;color:var(--dim);font-size:11.5px}
     <button data-view="tools"><span class="ico">⚙</span>工具调用</button>
     <button data-view="iso"><span class="ico">⧉</span>上下文隔离</button>
     <div class="sep"></div>
+    <button data-view="checkin"><span class="ico">☀</span>每日签到</button>
     <button data-view="models"><span class="ico">▤</span>模型 / 别名</button>
     <button data-view="usage"><span class="ico">◷</span>用量</button>
     <button data-view="logs"><span class="ico">≡</span>请求日志</button>
@@ -139,14 +140,9 @@ details summary{cursor:pointer;color:var(--dim);font-size:11.5px}
       <!-- 密钥池 -->
       <section class="view" id="v-keys">
         <h2>密钥池</h2><div class="sub">多个项目服务 AK 轮询，失败自动冷却</div>
-        <div class="panel">
-          <div class="head"><b>新增 key</b></div>
-          <div class="row">
-            <input id="kLabel" placeholder="备注名，如 主号" style="width:150px">
-            <input id="kValue" placeholder="meoo_project_…" style="width:330px;font-family:var(--mono);font-size:12px">
-            <span class="muted">权重 <input id="kWeight" type="number" value="1" min="1" max="5" style="width:64px"></span>
-            <button class="btn primary" id="addKey">添加</button>
-          </div>
+        <div class="row">
+          <button class="btn primary" id="openKeyModal">+ 添加密钥</button>
+          <span class="muted">只需粘一把 meoo_project_…，添加后自动探活</span>
         </div>
         <div class="panel" style="padding:0;overflow:auto">
           <table><thead><tr><th>备注</th><th>key</th><th>健康</th><th>权重</th><th>请求 / 失败</th><th>tokens</th><th>最近使用</th><th>操作</th></tr></thead>
@@ -204,6 +200,28 @@ details summary{cursor:pointer;color:var(--dim);font-size:11.5px}
         <h2>上下文隔离</h2><div class="sub">连发两次独立请求，第二次不带历史</div>
         <div class="row"><button class="btn primary" id="runIso">运行</button><span class="muted">期望：第二次不知道第一次的暗号</span></div>
         <div id="isoLog" class="log"></div><div id="isoVerdict"></div>
+      </section>
+
+      <!-- 签到 -->
+      <section class="view" id="v-checkin">
+        <h2>每日签到</h2>
+        <div class="sub">Meoo 网页端打开会触发每日登录积分发放；这里用网页登录态 Cookie 定时领取</div>
+        <div class="row">
+          <button class="btn primary" id="openCiModal">+ 添加账号</button>
+          <button class="btn" id="runAllCi">全部签到</button>
+          <label class="chk"><input type="checkbox" id="autoCi"> 自动签到（每 <input id="ciInterval" type="number" value="6" style="width:52px"> 小时）</label>
+          <span class="muted" id="ciStat"></span>
+        </div>
+        <div class="panel" style="padding:0;overflow:auto">
+          <table><thead><tr><th>备注</th><th>登录态</th><th>今日</th><th>累计积分</th><th>最近结果</th><th>操作</th></tr></thead>
+          <tbody id="ciBody"></tbody></table>
+        </div>
+        <div class="panel">
+          <div class="muted" style="line-height:1.8">
+            取 Cookie：浏览器登录 meoo.com → F12 → Network → 任意请求的 <code>Cookie</code> 头整段复制。<br>
+            Cookie 只存在服务器本地 <code>data/state.json</code>（600），接口返回时只显示前 8 位。
+          </div>
+        </div>
       </section>
 
       <!-- 模型 -->
@@ -291,6 +309,28 @@ details summary{cursor:pointer;color:var(--dim);font-size:11.5px}
   </div>
 </div>
 
+<div class="login" id="keyModal"><div class="box">
+  <h3>添加密钥</h3>
+  <div class="row"><input id="kValue" placeholder="粘贴 meoo_project_…" style="width:100%;font-family:var(--mono);font-size:12px"></div>
+  <div class="row"><input id="kLabel" placeholder="备注（可留空）" style="width:100%"></div>
+  <div class="row" style="justify-content:flex-end;margin-bottom:0">
+    <button class="btn" id="kCancel">取消</button>
+    <button class="btn primary" id="addKey">添加并探活</button>
+  </div>
+  <div class="muted" id="kMsg" style="margin-top:8px"></div>
+</div></div>
+
+<div class="login" id="ciModal"><div class="box">
+  <h3>添加签到账号</h3>
+  <div class="row"><input id="ciLabel" placeholder="备注，如 主号" style="width:100%"></div>
+  <div class="row"><textarea id="ciCookie" placeholder="粘贴 meoo.com 的 Cookie" style="min-height:80px;font-family:var(--mono);font-size:11.5px"></textarea></div>
+  <div class="row" style="justify-content:flex-end;margin-bottom:0">
+    <button class="btn" id="ciCancel">取消</button>
+    <button class="btn primary" id="addCi">添加并签到</button>
+  </div>
+  <div class="muted" id="ciMsg" style="margin-top:8px"></div>
+</div></div>
+
 <div class="login" id="login">
   <div class="box">
     <h3>登录控制台</h3>
@@ -335,6 +375,7 @@ $$('.nav button[data-view]').forEach(b=>b.onclick=()=>{
   if(b.dataset.view==='usage')loadUsage();
   if(b.dataset.view==='logs')loadLogs();
   if(b.dataset.view==='models')renderModels();
+  if(b.dataset.view==='checkin')renderCheckins();
 });
 
 /* ── 主题 ── */
@@ -360,7 +401,7 @@ async function refresh(){
   if(!TOKEN)return;
   try{
     SNAP=await admin('/admin/api/state');
-    renderKeys();renderClients();renderAliases();fillCfg();
+    renderKeys();renderClients();renderAliases();renderCheckins();fillCfg();
     const all=SNAP.models.length+Object.keys(SNAP.config.aliases).length;
     $('#cModels').textContent=all;
     await loadUsage(true);
@@ -464,12 +505,24 @@ function renderKeys(){
     try{await admin(`/admin/api/keys/${id}`,{method:'PATCH',body:JSON.stringify({[f]:v})});await refresh();}catch(e){alert(e.message);}
   });
 }
+$('#openKeyModal').onclick=()=>{$('#keyModal').classList.add('on');$('#kValue').focus();};
+$('#kCancel').onclick=()=>$('#keyModal').classList.remove('on');
 $('#addKey').onclick=async()=>{
+  const key=$('#kValue').value.trim();
+  if(!key){$('#kMsg').textContent='先粘贴密钥';return;}
+  $('#addKey').disabled=true;$('#kMsg').textContent='添加中…';
   try{
-    await admin('/admin/api/keys',{method:'POST',body:JSON.stringify({
-      label:$('#kLabel').value.trim()||'未命名',key:$('#kValue').value.trim(),weight:Number($('#kWeight').value)||1})});
-    $('#kValue').value='';$('#kLabel').value='';await refresh();
-  }catch(e){alert(e.message);}
+    const k=await admin('/admin/api/keys',{method:'POST',body:JSON.stringify({label:$('#kLabel').value.trim()||'key',key,weight:1})});
+    $('#kMsg').textContent='探活中…';
+    const h=await admin(`/admin/api/keys/${k.id}/probe`,{method:'POST'});
+    $('#kMsg').innerHTML = h.state==='ok'
+      ? `<span class="badge ok">已添加 · ${h.latencyMs}ms</span>`
+      : `<span class="badge bad">已添加但探活失败：${esc(h.error||'')}</span>`;
+    $('#kValue').value='';$('#kLabel').value='';
+    await refresh();
+    setTimeout(()=>{$('#keyModal').classList.remove('on');$('#kMsg').textContent='';},1200);
+  }catch(e){$('#kMsg').innerHTML=`<span class="badge bad">${esc(e.message)}</span>`;}
+  finally{$('#addKey').disabled=false;}
 };
 
 /* ── 客户端 key ── */
@@ -507,6 +560,87 @@ $('#addClient').onclick=async()=>{
     alert('已生成：'+c.key);
     await refresh();
   }catch(e){alert(e.message);}
+};
+
+/* ── 签到 ── */
+function renderCheckins(){
+  if(!SNAP)return;
+  const tb=$('#ciBody');
+  const list=SNAP.checkins||[];
+  tb.innerHTML=list.map(c=>{
+    const last=c.last;
+    const todayGranted=c.lastGrantDate===new Date().toISOString().slice(0,10);
+    const badge = !last ? '<span class="badge">未运行</span>'
+      : last.ok ? (last.granted?`<span class="badge ok">+${last.amount}</span>`:'<span class="badge">今日已领</span>')
+      : `<span class="badge bad">${esc((last.error||'').slice(0,24))}</span>`;
+    return `<tr data-id="${c.id}">
+      <td><input value="${esc(c.label)}" data-f="label" style="width:110px;padding:3px 6px"></td>
+      <td class="mono muted">${esc(c.cookie)}</td>
+      <td>${todayGranted?'<span class="badge ok">已到账</span>':'<span class="badge warn">待领</span>'}</td>
+      <td class="mono">${c.totalGranted||0}<span class="muted"> / ${c.grantCount||0}次</span></td>
+      <td>${badge}${last?`<span class="muted"> ${last.ms}ms</span>`:''}</td>
+      <td>
+        <button class="btn sm" data-act="run">签到</button>
+        <button class="btn sm" data-act="toggle">${c.enabled?'停用':'启用'}</button>
+        <button class="btn sm danger" data-act="del">删除</button>
+      </td></tr>`;
+  }).join('')||'<tr><td colspan="6" class="muted" style="padding:12px">还没有账号，点「+ 添加账号」粘贴 Cookie</td></tr>';
+
+  tb.querySelectorAll('button[data-act]').forEach(b=>b.onclick=async()=>{
+    const id=b.closest('tr').dataset.id, act=b.dataset.act, c=SNAP.checkins.find(x=>x.id===id);
+    try{
+      if(act==='run'){b.disabled=true;b.textContent='…';
+        const r=await admin(`/admin/api/checkins/${id}/run`,{method:'POST'});
+        b.textContent='签到';
+        if(!r.ok)alert('失败：'+(r.error||''));
+        else alert(r.granted?`签到成功 +${r.amount} 积分`:'今日已领过，接口未再发放');
+        await refresh();return;}
+      if(act==='toggle')await admin(`/admin/api/checkins/${id}`,{method:'PATCH',body:JSON.stringify({enabled:!c.enabled})});
+      if(act==='del'){if(!confirm('删除该账号？'))return;await admin(`/admin/api/checkins/${id}`,{method:'DELETE'});}
+      await refresh();
+    }catch(e){alert(e.message);}
+  });
+  tb.querySelectorAll('input[data-f=label]').forEach(inp=>inp.onchange=async()=>{
+    const id=inp.closest('tr').dataset.id;
+    try{await admin(`/admin/api/checkins/${id}`,{method:'PATCH',body:JSON.stringify({label:inp.value})});}catch(e){alert(e.message);}
+  });
+  $('#autoCi').checked=!!(SNAP.config.autoCheckin);
+  $('#ciInterval').value=SNAP.config.checkinIntervalH||6;
+  $('#ciStat').textContent=`${list.length} 个账号 · 累计 ${list.reduce((a,c)=>a+(c.totalGranted||0),0)} 积分`;
+}
+$('#openCiModal').onclick=()=>{$('#ciModal').classList.add('on');};
+$('#ciCancel').onclick=()=>$('#ciModal').classList.remove('on');
+$('#addCi').onclick=async()=>{
+  const cookie=$('#ciCookie').value.trim();
+  if(!cookie){$('#ciMsg').textContent='先粘贴 Cookie';return;}
+  $('#addCi').disabled=true;$('#ciMsg').textContent='添加并签到中…';
+  try{
+    const c=await admin('/admin/api/checkins',{method:'POST',body:JSON.stringify({label:$('#ciLabel').value.trim()||'账号',cookie})});
+    const r=await admin(`/admin/api/checkins/${c.id}/run`,{method:'POST'});
+    $('#ciMsg').innerHTML = r.ok
+      ? (r.granted?`<span class="badge ok">签到成功 +${r.amount}</span>`:'<span class="badge">今日已领</span>')
+      : `<span class="badge bad">${esc(r.error||'失败')}</span>`;
+    $('#ciCookie').value='';$('#ciLabel').value='';
+    await refresh();
+    setTimeout(()=>{$('#ciModal').classList.remove('on');$('#ciMsg').textContent='';},1500);
+  }catch(e){$('#ciMsg').innerHTML=`<span class="badge bad">${esc(e.message)}</span>`;}
+  finally{$('#addCi').disabled=false;}
+};
+$('#runAllCi').onclick=async()=>{
+  $('#runAllCi').disabled=true;$('#ciStat').textContent='签到中…';
+  try{const r=await admin('/admin/api/checkins-run-all',{method:'POST'});
+    const ok=r.results.filter(x=>x.granted).length;
+    $('#ciStat').textContent=`完成：${ok} 个账号今日到账`;
+    await refresh();
+  }catch(e){$('#ciStat').textContent=e.message;}
+  finally{$('#runAllCi').disabled=false;}
+};
+$('#autoCi').onchange=async()=>{
+  await admin('/admin/api/config',{method:'PATCH',body:JSON.stringify({autoCheckin:$('#autoCi').checked,checkinIntervalH:Number($('#ciInterval').value)||6})});
+  await refresh();
+};
+$('#ciInterval').onchange=async()=>{
+  await admin('/admin/api/config',{method:'PATCH',body:JSON.stringify({checkinIntervalH:Number($('#ciInterval').value)||6})});
 };
 
 /* ── 模型 / 别名 ── */

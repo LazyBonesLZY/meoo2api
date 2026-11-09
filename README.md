@@ -80,17 +80,26 @@ curl -s https://meoo.com/open/v1/cli-compat/projects/<urlId>/cloud/environment \
 
 ## 控制台
 
-`http://127.0.0.1:8791/`，需要管理密码（首次启动随机生成，写入 `data/admin-password.txt`，
-或用 `MEOO2API_ADMIN_PASSWORD` 指定）。左侧导航 + 顶部状态，暗/亮主题。
+`http://127.0.0.1:8791/`，需要管理密码：首次启动时**在终端打印一次**（不落盘，只存 SHA-256 哈希），
+或用 `MEOO2API_ADMIN_PASSWORD` 指定。忘记密码：
+
+```bash
+systemctl --user stop meoo2api          # 必须先停，避免旧进程把 state 刷回去
+node meoo2api.mjs --reset-password      # 打印一次新密码
+systemctl --user start meoo2api
+```
+
+左侧导航 + 顶部状态，暗/亮主题。
 
 | 视图 | 功能 |
 |---|---|
 | 概览 | 请求总量、成功率、P95、可用 key、近 24h 柱状图、告警条、一键全部探活 |
-| 密钥池 | 多个项目 AK：备注、权重（1-5）、启用/停用、单个探活、解除冷却、删除；显示健康状态与冷却倒计时 |
+| 密钥池 | 点「+ 添加密钥」→ 只粘一把 `meoo_project_…` → 自动探活；备注、权重（1-5）、启停、解冷却、删除 |
 | 访问密钥 | 写给调用方的 key：生成、复制、停用、删除 |
 | 对话 | 流式/非流式、max_tokens、temperature、reasoning 折叠 |
 | 工具调用 | 内置 `get_weather` / `get_time` / `calc`，自动 tool_calls → 本地执行 → 回传 → 最终回答 |
 | 上下文隔离 | 连发两次独立请求，判定是否串味 |
+| 每日签到 | 用 meoo.com 网页 Cookie 领每日登录积分，支持手动/全部/自动（默认每 6 小时），显示累计积分 |
 | 模型 / 别名 | 上游模型清单、隐藏开关、别名增删 |
 | 用量 | 按小时聚合：请求/成功/失败/prompt/completion/P50/P95 |
 | 请求日志 | 服务端记录，按状态、request id、key 备注过滤 |
@@ -103,13 +112,23 @@ curl -s https://meoo.com/open/v1/cli-compat/projects/<urlId>/cloud/environment \
 - 探活会真实请求上游 `/models`，鉴权失败标记 `invalid` 并进入硬冷却
 - 没有可用 key 时返回 `503 no_available_key`；BYOK 请求不占池
 
+## 每日签到
+
+Meoo 的每日登录积分（`daily_login`）不是 AK 能拿的：网页端打开时调用
+`GET /api/mc/entitlement/init`，响应里的 `dailyLoginGranted` / `dailyLoginGrantAmount` 就是当天发放结果。
+用 AK 请求该接口会被 `API_KEY_ROUTE_FORBIDDEN` 挡掉，所以本项目的签到走**网页登录态 Cookie**。
+
+在「每日签到」页粘贴 meoo.com 的 Cookie（F12 → Network → 任意请求的 Cookie 头），即可手动或自动领取。
+Cookie 存在 `data/state.json`（600），接口返回时只显示前 8 位。
+
 ## 运行数据
 
 ```
-data/state.json           key 池、客户端 key、别名、配置、日志、用量（600）
-data/admin-password.txt   首次启动生成的管理密码（600）
-meoo2api.log              访问日志 JSONL（不含 body、不含 key 明文）
+data/state.json   key 池、客户端 key、签到账号、别名、配置、日志、用量（600）
+meoo2api.log      访问日志 JSONL（不含 body、不含 key 明文）
 ```
+
+管理密码只存哈希，不落盘；首次启动打印一次。
 
 ## 无状态与隔离
 

@@ -24,6 +24,7 @@ const MAX_BODY = Number(process.env.MAX_BODY_BYTES || 8 * 1024 * 1024);
 const BOOT_AK = process.env.MEOO_PROJECT_AK || '';
 const BOOT_KEYS = (process.env.MEOO2API_KEYS || '').split(',').map((s) => s.trim()).filter(Boolean);
 const BYOK_RE = /^meoo_project_[A-Za-z0-9._-]{8,}$/;
+const RESET_PW = process.argv.includes('--reset-password');
 
 const NATIVE = [
   'qwen3.8-flash', 'qwen3.8-max', 'qwen3.7-max', 'qwen3.7-plus',
@@ -69,9 +70,12 @@ function defaultState() {
       hiddenModels: [],
       adminUser: 'admin',
       adminPass: '',
+      autoCheckin: false,
+      checkinIntervalH: 6,
     },
     keys: [],
     clientKeys: [],
+    checkins: [],
     logs: [],
     usage: {},
   };
@@ -90,11 +94,11 @@ function loadState() {
   } else {
     state = defaultState();
   }
-  if (!state.config.adminPass) {
+  if (!state.config.adminPass && !RESET_PW) {
     const pw = process.env.MEOO2API_ADMIN_PASSWORD || randomBytes(9).toString('base64url');
     state.config.adminPass = sha(pw);
-    writeFileSync(join(DATA, 'admin-password.txt'), pw + '\n', { mode: 0o600 });
-    console.log(`\n  管理端密码：${pw}   （已写入 ${join(DATA, 'admin-password.txt')}）\n`);
+    console.log(`\n  ── 管理端密码（只显示这一次，不落盘）：${pw}`);
+    console.log(`     忘记可执行：node meoo2api.mjs --reset-password\n`);
   }
   if (!state.keys.length && BOOT_AK) {
     state.keys.push(newKey({ label: 'bootstrap', key: BOOT_AK }));
@@ -142,6 +146,15 @@ const newClientKey = (o = {}) => ({
 });
 
 loadState();
+
+if (RESET_PW) {
+  const pw = randomBytes(9).toString('base64url');
+  state.config.adminPass = sha(pw);
+  saveState(true);
+  console.log(`新的管理端密码（只显示这一次）：${pw}`);
+  process.exit(0);
+}
+
 setInterval(() => saveState(), 5000).unref();
 
 /* ───────── 日志 / 用量 ───────── */
@@ -389,6 +402,67 @@ async function probeKey(k) {
   return k.health;
 }
 
+/* ───────── 每日登录积分（签到） ───────── */
+// Meoo 网页端打开时会 GET /api/mc/entitlement/init 触发每日登录积分发放。
+// 该接口只认网页登录态，AK 会被 API_KEY_ROUTE_FORBIDDEN 挡掉，所以这里用 Cookie。
+
+const CHECKIN_URL = 'https://meoo.com/api/mc/entitlement/init';
+const today = () => new Date().toISOString().slice(0, 10);
+
+async function runCheckin(c) {
+  const t0 = Date.now();
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 20000);
+    const r = await fetch(CHECKIN_URL, {
+      headers: {
+        Cookie: c.cookie,
+        Accept: 'application/json',
+        Referer: 'https://meoo.com/',
+        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36',
+      },
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    const text = await r.text();
+    let d; try { d = JSON.parse(text); } catch {}
+    if (!r.ok || !d?.success) {
+      c.last = { at: Date.now(), ok: false, ms: Date.now() - t0, error: d?.error?.message || `HTTP ${r.status}` };
+      dirty = true;
+      return c.last;
+    }
+    const data = d.data || {};
+    const granted = Boolean(data.dailyLoginGranted);
+    const amount = Number(data.dailyLoginGrantAmount || 0);
+    c.last = { at: Date.now(), ok: true, ms: Date.now() - t0, granted, amount, initialized: Boolean(data.initialized) };
+    if (granted) {
+      c.lastGrantDate = today();
+      c.totalGranted = (c.totalGranted || 0) + amount;
+      c.grantCount = (c.grantCount || 0) + 1;
+    }
+    dirty = true;
+    return c.last;
+  } catch (e) {
+    c.last = { at: Date.now(), ok: false, ms: Date.now() - t0, error: e.name === 'AbortError' ? '超时' : e.message };
+    dirty = true;
+    return c.last;
+  }
+}
+
+async function runAllCheckins(force = false) {
+  const out = [];
+  for (const c of state.checkins) {
+    if (!c.enabled) continue;
+    if (!force && c.lastGrantDate === today()) { out.push({ id: c.id, label: c.label, skipped: '今日已到账' }); continue; }
+    if (!force && c.last && Date.now() - c.last.at < state.config.checkinIntervalH * 3600e3) continue;
+    out.push({ id: c.id, label: c.label, ...(await runCheckin(c)) });
+  }
+  saveState(true);
+  return out;
+}
+
+setInterval(() => { if (state.config.autoCheckin) runAllCheckins(false).catch(() => {}); }, 30 * 60 * 1000).unref();
+
 /* ───────── 管理 API ───────── */
 
 async function adminRoute(req, res, p, url) {
@@ -413,6 +487,7 @@ async function adminRoute(req, res, p, url) {
       config: { ...state.config, adminPass: undefined },
       keys: state.keys.map((k) => viewKey(k, reveal)).map((k) => ({ ...k, cooling: Math.max(0, Math.ceil((k.cooldownUntil - now) / 1000)) })),
       clientKeys: state.clientKeys.map((c) => ({ ...c, key: reveal ? c.key : `${c.key.slice(0, 6)}…${c.key.slice(-4)}` })),
+      checkins: state.checkins.map((c) => ({ ...c, cookie: reveal ? c.cookie : `${c.cookie.slice(0, 8)}…(${c.cookie.length})` })),
       models: NATIVE,
       alerts: buildAlerts(),
       uptime: process.uptime(),
@@ -481,6 +556,54 @@ async function adminRoute(req, res, p, url) {
     }
   }
 
+  if (p === '/admin/api/checkins') {
+    if (req.method === 'GET') return sendJson(res, 200, { checkins: state.checkins.map((c) => ({ ...c, cookie: `${c.cookie.slice(0, 8)}…(${c.cookie.length})` })) });
+    if (req.method === 'POST') {
+      let b; try { b = JSON.parse((await readBody(req)) || '{}'); } catch { return sendJson(res, 400, { error: 'bad json' }); }
+      const cookie = String(b.cookie || '').trim();
+      if (!cookie) return sendJson(res, 400, { error: '缺少 Cookie' });
+      const c = {
+        id: 'ci_' + randomBytes(6).toString('hex'),
+        label: String(b.label || '我的账号').slice(0, 40),
+        cookie,
+        enabled: true,
+        createdAt: Date.now(),
+        lastGrantDate: '',
+        totalGranted: 0,
+        grantCount: 0,
+        last: null,
+      };
+      state.checkins.push(c); dirty = true; saveState(true);
+      return sendJson(res, 200, { ...c, cookie: `${cookie.slice(0, 8)}…(${cookie.length})` });
+    }
+  }
+
+  const cim = p.match(/^\/admin\/api\/checkins\/([^/]+)(\/.*)?$/);
+  if (cim) {
+    const c = state.checkins.find((x) => x.id === cim[1]);
+    if (!c) return sendJson(res, 404, { error: 'not found' });
+    const sub = cim[2] || '';
+    if (sub === '/run' && req.method === 'POST') return sendJson(res, 200, await runCheckin(c));
+    if (sub === '/reveal' && req.method === 'GET') return sendJson(res, 200, { cookie: c.cookie });
+    if (req.method === 'PATCH') {
+      let b; try { b = JSON.parse((await readBody(req)) || '{}'); } catch { return sendJson(res, 400, { error: 'bad json' }); }
+      for (const f of ['label', 'enabled']) if (b[f] !== undefined) c[f] = b[f];
+      if (b.cookie) c.cookie = String(b.cookie).trim();
+      dirty = true; saveState(true);
+      return sendJson(res, 200, { ok: true });
+    }
+    if (req.method === 'DELETE') {
+      state.checkins = state.checkins.filter((x) => x.id !== c.id); dirty = true; saveState(true);
+      return sendJson(res, 200, { ok: true });
+    }
+  }
+
+  if (p === '/admin/api/checkins-run-all' && req.method === 'POST') {
+    const results = await runAllCheckins(true);
+    saveState(true);
+    return sendJson(res, 200, { results });
+  }
+
   if (p === '/admin/api/aliases') {
     if (req.method === 'POST') {
       let b; try { b = JSON.parse((await readBody(req)) || '{}'); } catch { return sendJson(res, 400, { error: 'bad json' }); }
@@ -503,6 +626,8 @@ async function adminRoute(req, res, p, url) {
       if (b[f] !== undefined && Number.isFinite(Number(b[f]))) cfg[f] = Number(b[f]);
     }
     if (b.sticky !== undefined) cfg.sticky = Boolean(b.sticky);
+    if (b.autoCheckin !== undefined) cfg.autoCheckin = Boolean(b.autoCheckin);
+    if (b.checkinIntervalH !== undefined) cfg.checkinIntervalH = Number(b.checkinIntervalH) || 6;
     if (Array.isArray(b.hiddenModels)) cfg.hiddenModels = b.hiddenModels.map(String);
     if (b.adminPassword) { cfg.adminPass = sha(String(b.adminPassword)); tokens.clear(); }
     dirty = true; saveState(true);
@@ -533,7 +658,11 @@ async function adminRoute(req, res, p, url) {
   }
 
   if (p === '/admin/api/export' && req.method === 'GET') {
-    return sendJson(res, 200, { ...state, config: { ...state.config, adminPass: undefined } });
+    return sendJson(res, 200, {
+      ...state,
+      config: { ...state.config, adminPass: undefined },
+      checkins: state.checkins.map((c) => ({ ...c, cookie: '' })),
+    });
   }
 
   return sendJson(res, 404, { error: 'unknown admin path' });
@@ -747,11 +876,9 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, BIND, () => {
-  const pwFile = join(DATA, 'admin-password.txt');
   console.log(`meoo2api   http://${BIND}:${PORT}/`);
   console.log(`  upstream ${BASE}`);
-  console.log(`  keys     ${state.keys.length} 池内 / ${state.clientKeys.length} 客户端`);
-  console.log(`  admin    ${existsSync(pwFile) ? '密码见 ' + pwFile : 'env MEOO2API_ADMIN_PASSWORD'}`);
+  console.log(`  keys     ${state.keys.length} 池内 / ${state.clientKeys.length} 客户端 / ${state.checkins.length} 签到账号`);
   console.log(`  log      ${LOG}`);
 });
 
