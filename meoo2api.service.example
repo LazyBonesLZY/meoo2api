@@ -1,0 +1,16 @@
+[Unit]
+Description=meoo2api (Meoo gateway -> OpenAI compatible)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/meoo2api
+ExecStart=/usr/bin/node %h/meoo2api/meoo2api.mjs
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
