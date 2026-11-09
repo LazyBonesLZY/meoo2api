@@ -25,24 +25,26 @@ type Stats struct {
 	LastUsed int64 `json:"lastUsed"`
 }
 
-type Account struct {
+// Identity 是挂 key / 签到记录上的账号标识
+type Identity struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 	Kind string `json:"kind,omitempty"`
 }
 
 type Key struct {
-	ID            string   `json:"id"`
-	Label         string   `json:"label"`
-	Key           string   `json:"key"`
-	Enabled       bool     `json:"enabled"`
-	Weight        int      `json:"weight"`
-	Note          string   `json:"note"`
-	CreatedAt     int64    `json:"createdAt"`
-	Health        Health   `json:"health"`
-	Stats         Stats    `json:"stats"`
-	CooldownUntil int64    `json:"cooldownUntil"`
-	Account       *Account `json:"account,omitempty"`
+	ID            string    `json:"id"`
+	Label         string    `json:"label"`
+	Key           string    `json:"key"`
+	Enabled       bool      `json:"enabled"`
+	Weight        int       `json:"weight"`
+	Note          string    `json:"note"`
+	CreatedAt     int64     `json:"createdAt"`
+	Health        Health    `json:"health"`
+	Stats         Stats     `json:"stats"`
+	CooldownUntil int64     `json:"cooldownUntil"`
+	Account       *Identity `json:"account,omitempty"`
+	AccountID     string    `json:"accountId,omitempty"`
 }
 
 type ClientKey struct {
@@ -66,6 +68,26 @@ type CheckinLast struct {
 	BalanceAfter *int64 `json:"balanceAfter"`
 }
 
+// Account 是一个 Meoo 账号：持有登录态、个人 AK，以及它产出的项目 AK（入池）
+type Account struct {
+	ID             string       `json:"id"`
+	Label          string       `json:"label"`
+	UserID         string       `json:"userId,omitempty"`
+	Name           string       `json:"name,omitempty"`
+	Cookie         string       `json:"cookie,omitempty"`
+	Enabled        bool         `json:"enabled"`
+	CreatedAt      int64        `json:"createdAt"`
+	LastPing       int64        `json:"lastPing"`
+	PingOK         bool         `json:"pingOk"`
+	Expired        bool         `json:"expired"`
+	LastGrantDate  string       `json:"lastGrantDate"`
+	TotalGranted   int64        `json:"totalGranted"`
+	GrantCount     int64        `json:"grantCount"`
+	Last           *CheckinLast `json:"last,omitempty"`
+	PersonalKeyIDs []string     `json:"personalKeyIds"`
+	ProjectKeyIDs  []string     `json:"projectKeyIds"`
+}
+
 type Checkin struct {
 	ID            string       `json:"id"`
 	Label         string       `json:"label"`
@@ -76,7 +98,7 @@ type Checkin struct {
 	TotalGranted  int64        `json:"totalGranted"`
 	GrantCount    int64        `json:"grantCount"`
 	Last          *CheckinLast `json:"last"`
-	Account       *Account     `json:"account,omitempty"`
+	Account       *Identity    `json:"account,omitempty"`
 	LastPing      int64        `json:"lastPing"`
 	PingOK        bool         `json:"pingOk"`
 	Expired       bool         `json:"expired"`
@@ -104,6 +126,7 @@ type Config struct {
 	AdminUser        string            `json:"adminUser"`
 	AdminPass        string            `json:"adminPass"`
 	AutoCheckin      bool              `json:"autoCheckin"`
+	AutoOnboard      bool              `json:"autoOnboard"`
 	CheckinHour      int               `json:"checkinHour"`
 	KeepAliveHours   int               `json:"keepAliveHours"`
 }
@@ -140,6 +163,7 @@ type State struct {
 	Keys         []*Key             `json:"keys"`
 	ClientKeys   []*ClientKey       `json:"clientKeys"`
 	Checkins     []*Checkin         `json:"checkins"`
+	Accounts     []*Account         `json:"accounts"`
 	PersonalKeys []*PersonalKey     `json:"personalKeys"`
 	Logs         []*LogRow          `json:"logs"`
 	Usage        map[string]*Bucket `json:"usage"`

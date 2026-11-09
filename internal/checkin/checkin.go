@@ -35,7 +35,7 @@ type Result struct {
 	model.CheckinLast
 }
 
-func Run(st *store.Store, c *model.Checkin) model.CheckinLast {
+func Run(st *store.Store, a *model.Account) model.CheckinLast {
 	t0 := time.Now()
 	last := model.CheckinLast{At: t0.UnixMilli()}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -44,7 +44,7 @@ func Run(st *store.Store, c *model.Checkin) model.CheckinLast {
 	if err != nil {
 		last.Error = err.Error()
 	} else {
-		req.Header.Set("Cookie", c.Cookie)
+		req.Header.Set("Cookie", a.Cookie)
 		req.Header.Set("Accept", "application/json")
 		req.Header.Set("Referer", "https://meoo.com/")
 		req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36")
@@ -77,14 +77,14 @@ func Run(st *store.Store, c *model.Checkin) model.CheckinLast {
 		}
 	}
 	st.Mu.Lock()
-	c.Last = &last
+	a.Last = &last
 	switch {
 	case last.Granted:
-		c.LastGrantDate = model.Today()
-		c.TotalGranted += last.Amount
-		c.GrantCount++
+		a.LastGrantDate = model.Today()
+		a.TotalGranted += last.Amount
+		a.GrantCount++
 	case last.SkipReason == "ALREADY_GRANTED_TODAY":
-		c.LastGrantDate = model.Today()
+		a.LastGrantDate = model.Today()
 	}
 	st.Mu.Unlock()
 	st.Touch()
@@ -94,17 +94,17 @@ func Run(st *store.Store, c *model.Checkin) model.CheckinLast {
 func RunAll(st *store.Store, force bool) []Result {
 	out := []Result{}
 	st.Mu.RLock()
-	list := append([]*model.Checkin(nil), st.Data.Checkins...)
+	list := append([]*model.Account(nil), st.Data.Accounts...)
 	st.Mu.RUnlock()
-	for _, c := range list {
-		if !c.Enabled {
+	for _, a := range list {
+		if !a.Enabled || a.Expired {
 			continue
 		}
-		if !force && c.LastGrantDate == model.Today() {
-			out = append(out, Result{ID: c.ID, Label: c.Label, Skipped: "今日已到账"})
+		if !force && a.LastGrantDate == model.Today() {
+			out = append(out, Result{ID: a.ID, Label: a.Label, Skipped: "今日已到账"})
 			continue
 		}
-		out = append(out, Result{ID: c.ID, Label: c.Label, CheckinLast: Run(st, c)})
+		out = append(out, Result{ID: a.ID, Label: a.Label, CheckinLast: Run(st, a)})
 	}
 	_ = st.Save()
 	return out
@@ -112,7 +112,7 @@ func RunAll(st *store.Store, force bool) []Result {
 
 // StartScheduler 每天在 checkinHour 后领一次，其余时间只做会话保活。
 // 不需要外部 cron：调度、保活都在进程内完成。
-func StartScheduler(st *store.Store, ping func(*model.Checkin) (bool, error)) {
+func StartScheduler(st *store.Store, ping func(*model.Account) (bool, error)) {
 	go func() {
 		t := time.NewTicker(5 * time.Minute)
 		defer t.Stop()
@@ -123,31 +123,29 @@ func StartScheduler(st *store.Store, ping func(*model.Checkin) (bool, error)) {
 	}()
 }
 
-func run(st *store.Store, ping func(*model.Checkin) (bool, error)) {
+func run(st *store.Store, ping func(*model.Account) (bool, error)) {
 	st.Mu.RLock()
 	on := st.Data.Config.AutoCheckin
 	hour := st.Data.Config.CheckinHour
 	keep := st.Data.Config.KeepAliveHours
-	list := append([]*model.Checkin(nil), st.Data.Checkins...)
+	list := append([]*model.Account(nil), st.Data.Accounts...)
 	st.Mu.RUnlock()
 
 	now := time.Now()
-	for _, c := range list {
-		if !c.Enabled {
+	for _, a := range list {
+		if !a.Enabled {
 			continue
 		}
-		if c.Expired {
+		if a.Expired {
 			continue
 		}
-		// 保活：隔 keep 小时打一次轻量接口
-		if keep > 0 && (c.LastPing == 0 || now.UnixMilli()-c.LastPing > int64(keep)*3600*1000) {
+		if keep > 0 && (a.LastPing == 0 || now.UnixMilli()-a.LastPing > int64(keep)*3600*1000) {
 			if ping != nil {
-				_, _ = ping(c)
+				_, _ = ping(a)
 			}
 		}
-		// 签到：每天一次，过了设定的整点才领
-		if on && now.Hour() >= hour && c.LastGrantDate != model.Today() {
-			Run(st, c)
+		if on && now.Hour() >= hour && a.LastGrantDate != model.Today() {
+			Run(st, a)
 		}
 	}
 	st.Mu.Lock()

@@ -87,7 +87,7 @@ details summary{cursor:pointer;color:var(--dim);font-size:11.5px}
     <button data-view="tools"><span class="ico">⚙</span>工具调用</button>
     <button data-view="iso"><span class="ico">⧉</span>上下文隔离</button>
     <div class="sep"></div>
-    <button data-view="checkin"><span class="ico">☀</span>每日签到</button>
+    <button data-view="accounts"><span class="ico">☺</span>账号</button>
     <button data-view="models"><span class="ico">▤</span>模型 / 别名</button>
     <button data-view="usage"><span class="ico">◷</span>用量</button>
     <button data-view="logs"><span class="ico">≡</span>请求日志</button>
@@ -202,31 +202,28 @@ details summary{cursor:pointer;color:var(--dim);font-size:11.5px}
         <div id="isoLog" class="log"></div><div id="isoVerdict"></div>
       </section>
 
-      <!-- 签到 -->
-      <section class="view" id="v-checkin">
-        <h2>每日签到</h2>
-        <div class="sub">Meoo 网页端打开会触发每日登录积分发放；这里用网页登录态 Cookie 定时领取</div>
+      <!-- 账号 -->
+      <section class="view" id="v-accounts">
+        <h2>账号</h2>
+        <div class="sub">一个账号 = 登录态 + 个人 AK + 它产出的项目 AK（只有项目 AK 进号池）</div>
         <div class="row">
-          <button class="btn primary" id="openCiModal">+ 添加账号</button>
-          <button class="btn" id="runAllCi">全部签到</button>
-          <label class="chk"><input type="checkbox" id="autoCi"> 每天 <input id="ciHour" type="number" min="0" max="23" value="0" style="width:52px"> 点后领取一次</label>
+          <button class="btn primary" id="openAccModal">+ 添加账号</button>
+          <button class="btn" id="runAllAcc">全部签到</button>
+          <label class="chk"><input type="checkbox" id="autoCi"> 每天 <input id="ciHour" type="number" min="0" max="23" value="0" style="width:52px"> 点后签到一次</label>
           <label class="chk">会话保活每 <input id="ciKeep" type="number" min="1" max="48" value="6" style="width:52px"> 小时</label>
-          <span class="muted" id="ciStat"></span>
+          <label class="chk"><input type="checkbox" id="autoOnboard"> 新账号自动接入号池</label>
+          <span class="muted" id="accStat"></span>
         </div>
         <div id="accWarn"></div>
         <div class="panel" style="padding:0;overflow:auto">
-          <table><thead><tr><th>备注</th><th>账号</th><th>登录态</th><th>今日</th><th>累计积分</th><th>最近结果</th><th>操作</th></tr></thead>
-          <tbody id="ciBody"></tbody></table>
-        </div>
-        <div class="panel">
-          <div class="head"><b>登录态创建的 API Key</b><span class="muted">个人 AK，可调 CLI / Open API，不能进模型池</span></div>
-          <div style="overflow:auto"><table><thead><tr><th>账号</th><th>key</th><th>scopes</th><th>创建时间</th><th></th></tr></thead>
-          <tbody id="pkBody"></tbody></table></div>
+          <table><thead><tr>
+            <th>备注</th><th>账号</th><th>会话</th><th>签到</th><th>个人 AK</th><th>项目 AK（池内）</th><th>操作</th>
+          </tr></thead><tbody id="accBody"></tbody></table>
         </div>
         <div class="panel">
           <div class="muted" style="line-height:1.8">
-            取 Cookie：浏览器登录 meoo.com → F12 → Network → 任意请求的 <code>Cookie</code> 头整段复制。<br>
-            Cookie 只存在服务器本地 <code>data/state.json</code>（600），接口返回时只显示前 8 位。
+            个人 AK 调不动模型网关（401 SERVICE_AK_FORMAT_INVALID），它只用来建项目、取项目 AK。<br>
+            点「接入号池」会自动：建项目 → 开云服务（占 1 个云服务额度）→ 取项目 AK → 入池。
           </div>
         </div>
       </section>
@@ -328,12 +325,12 @@ details summary{cursor:pointer;color:var(--dim);font-size:11.5px}
 </div></div>
 
 <div class="login" id="ciModal"><div class="box">
-  <h3>添加签到账号</h3>
+  <h3>添加账号</h3>
   <div class="row"><input id="ciLabel" placeholder="备注，如 主号" style="width:100%"></div>
   <div class="row"><textarea id="ciCookie" placeholder="粘贴 meoo.com 的 Cookie" style="min-height:80px;font-family:var(--mono);font-size:11.5px"></textarea></div>
   <div class="row" style="justify-content:flex-end;margin-bottom:0">
     <button class="btn" id="ciCancel">取消</button>
-    <button class="btn primary" id="addCi">添加并签到</button>
+    <button class="btn primary" id="addCi">添加</button>
   </div>
   <div class="muted" id="ciMsg" style="margin-top:8px"></div>
 </div></div>
@@ -382,7 +379,7 @@ $$('.nav button[data-view]').forEach(b=>b.onclick=()=>{
   if(b.dataset.view==='usage')loadUsage();
   if(b.dataset.view==='logs')loadLogs();
   if(b.dataset.view==='models')renderModels();
-  if(b.dataset.view==='checkin')renderCheckins();
+  if(b.dataset.view==='accounts')renderAccounts();
 });
 
 /* ── 主题 ── */
@@ -408,7 +405,7 @@ async function refresh(){
   if(!TOKEN)return;
   try{
     SNAP=await admin('/admin/api/state');
-    renderKeys();renderClients();renderAliases();renderCheckins();fillCfg();
+    renderKeys();renderClients();renderAliases();renderAccounts();fillCfg();
     const all=SNAP.models.length+Object.keys(SNAP.config.aliases).length;
     $('#cModels').textContent=all;
     await loadUsage(true);
@@ -484,7 +481,9 @@ function renderKeys(){
   tb.innerHTML=SNAP.keys.map(k=>`<tr data-id="${k.id}">
     <td><input value="${esc(k.label)}" data-f="label" style="width:110px;padding:3px 6px"></td>
     <td class="mono">${esc(k.key)}</td>
-    <td>${k.account?`<span title="${esc(k.account.id)}">${esc(k.account.name)}</span>`:'<span class="muted">未识别</span>'}</td>
+    <td>${k.account?`<span title="${esc(k.account.id)}">${esc(k.account.name)}</span>`
+      : (k.accountId?`<span>${esc((SNAP.accounts||[]).find(a=>a.id===k.accountId)?.label||k.accountId)}</span>`
+        : '<span class="muted">未绑定</span>')}</td>
     <td>${healthBadge(k)}</td>
     <td><input type="number" min="1" max="5" value="${k.weight}" data-f="weight" style="width:56px;padding:3px 5px"></td>
     <td class="mono">${k.stats.req} / ${k.stats.fail}</td>
@@ -573,135 +572,116 @@ $('#addClient').onclick=async()=>{
   }catch(e){alert(e.message);}
 };
 
-/* ── 签到 ── */
-function renderCheckins(){
+/* ── 账号 ── */
+function renderAccounts(){
   if(!SNAP)return;
-  const tb=$('#ciBody');
-  const list=SNAP.checkins||[];
-  tb.innerHTML=list.map(c=>{
-    const last=c.last;
-    const todayGranted=c.lastGrantDate===new Date().toISOString().slice(0,10);
-    const badge = !last ? '<span class="badge">未运行</span>'
-      : last.ok ? (last.granted?`<span class="badge ok">+${last.amount}</span>`:'<span class="badge">今日已领</span>')
-      : `<span class="badge bad">${esc((last.error||'').slice(0,24))}</span>`;
-    const skip = last && last.ok && !last.granted && last.skipReason
-      ? `<span class="muted"> ${last.skipReason==='ALREADY_GRANTED_TODAY'?'今日已领':esc(last.skipReason)}</span>` : '';
-    return `<tr data-id="${c.id}">
-      <td><input value="${esc(c.label)}" data-f="label" style="width:110px;padding:3px 6px"></td>
-      <td>${c.account?`<span title="${esc(c.account.id)}">${esc(c.account.name)}</span>`:'<span class="muted">未识别</span>'}
-        ${c.expired?'<span class="badge bad">会话失效</span>':(c.lastPing?`<span class="badge ${c.pingOk?'ok':''}">保活 ${new Date(c.lastPing).toLocaleTimeString('zh-CN',{hour12:false})}</span>`:'')}</td>
-      <td class="mono muted">${esc(c.cookie)}</td>
-      <td>${todayGranted?'<span class="badge ok">已到账</span>':'<span class="badge warn">待领</span>'}</td>
-      <td class="mono">${c.totalGranted||0}<span class="muted"> / ${c.grantCount||0}次</span></td>
-      <td>${badge}${skip}${last?`<span class="muted"> ${last.ms}ms</span>`:''}</td>
+  const list=SNAP.accounts||[];
+  const tb=$('#accBody');
+  const today=new Date().toISOString().slice(0,10);
+  tb.innerHTML=list.map(a=>{
+    const done=a.lastGrantDate===today;
+    const session = a.expired?'<span class="badge bad">会话失效</span>'
+      : (a.lastPing?`<span class="badge ${a.pingOk?'ok':''}">${new Date(a.lastPing).toLocaleTimeString('zh-CN',{hour12:false})}</span>`:'<span class="badge">未保活</span>');
+    const pk=(a.personalKeys||[]).length?`<span class="badge">${a.personalKeys.length} 个</span>`:'<span class="muted">无</span>';
+    const proj=(a.projectKeys||[]).length
+      ? a.projectKeys.map(k=>`<span class="badge ${k.health==='ok'?'ok':''}" title="${esc(k.key)}">${esc(k.label)}</span>`).join(' ')
+      : '<span class="muted">未接入</span>';
+    return `<tr data-id="${a.id}">
+      <td><input value="${esc(a.label)}" data-f="label" style="width:110px;padding:3px 6px"></td>
+      <td>${a.name?`<span title="${esc(a.userId||'')}">${esc(a.name)}</span>`:'<span class="muted">未识别</span>'}</td>
+      <td>${session}</td>
+      <td>${done?'<span class="badge ok">今日已领</span>':'<span class="badge warn">待领</span>'}
+          <span class="muted">累计 ${a.totalGranted||0}</span></td>
+      <td>${pk}</td>
+      <td>${proj}</td>
       <td>
-        <button class="btn sm" data-act="run">签到</button>
-        <button class="btn sm" data-act="identify">识别</button>
         <button class="btn sm" data-act="ping">保活</button>
-        <button class="btn sm" data-act="createkey">建 AK</button>
-        <button class="btn sm" data-act="provision">开项目</button>
-        <button class="btn sm" data-act="toggle">${c.enabled?'停用':'启用'}</button>
+        <button class="btn sm" data-act="checkin">签到</button>
+        <button class="btn sm" data-act="identify">识别</button>
+        <button class="btn sm" data-act="pkey">建个人 AK</button>
+        <button class="btn sm primary" data-act="onboard">接入号池</button>
         <button class="btn sm danger" data-act="del">删除</button>
       </td></tr>`;
-  }).join('')||'<tr><td colspan="6" class="muted" style="padding:12px">还没有账号，点「+ 添加账号」粘贴 Cookie</td></tr>';
+  }).join('')||'<tr><td colspan="7" class="muted" style="padding:12px">还没有账号，点「+ 添加账号」粘贴 Cookie</td></tr>';
 
   tb.querySelectorAll('button[data-act]').forEach(b=>b.onclick=async()=>{
-    const id=b.closest('tr').dataset.id, act=b.dataset.act, c=SNAP.checkins.find(x=>x.id===id);
+    const id=b.closest('tr').dataset.id, act=b.dataset.act;
+    b.disabled=true;
+    const old=b.textContent; b.textContent='…';
     try{
-      if(act==='run'){b.disabled=true;b.textContent='…';
-        const r=await admin(`/admin/api/checkins/${id}/run`,{method:'POST'});
-        b.textContent='签到';
-        if(!r.ok)alert('失败：'+(r.error||''));
-        else alert(r.granted?`签到成功 +${r.amount} 积分`:'今日已领过，接口未再发放');
-        await refresh();return;}
-      if(act==='identify'){const r=await admin(`/admin/api/checkins/${id}/identify`,{method:'POST'});
-        alert('账号: '+(r.account?.name||'')+'\nID: '+(r.account?.id||''));await refresh();return;}
-      if(act==='ping'){const r=await admin(`/admin/api/checkins/${id}/ping`,{method:'POST'});
-        alert(r.ok?'会话有效（已保活）':'保活失败：'+(r.error||''));await refresh();return;}
-      if(act==='createkey'){
-        if(!confirm('在该账号下创建一个个人 API Key？\n（可调 CLI/Open API，但不能进模型池）'))return;
-        const r=await admin(`/admin/api/checkins/${id}/create-key`,{method:'POST'});
+      if(act==='ping'){const r=await admin(`/admin/api/accounts/${id}/ping`,{method:'POST'});
+        alert(r.ok?'会话有效（已保活）':'保活失败：'+(r.error||''));}
+      if(act==='checkin'){const r=await admin(`/admin/api/accounts/${id}/checkin`,{method:'POST'});
+        alert(r.ok?(r.granted?`签到成功 +${r.amount}`:'今日已领过，未再发放'):('失败：'+(r.error||'')));}
+      if(act==='identify'){const r=await admin(`/admin/api/accounts/${id}/identify`,{method:'POST'});
+        alert('账号：'+(r.name||'')+'\nuserId：'+(r.userId||''));}
+      if(act==='pkey'){
+        if(!confirm('在该账号下创建个人 API Key？\n（可调 CLI/Open API，不能直接进号池）'))return;
+        const r=await admin(`/admin/api/accounts/${id}/personal-key`,{method:'POST'});
         navigator.clipboard?.writeText(r.key);
-        alert('已创建并复制：\n'+r.key+'\n\n'+r.note);await refresh();return;}
-      if(act==='provision'){
-        if(!confirm('将在该账号下：\n1) 新建项目\n2) 开通云服务（占用 1 个云服务额度）\n3) 取项目服务 AK 加入模型池\n\n继续？'))return;
-        b.disabled=true;b.textContent='…';
-        try{const r=await admin(`/admin/api/checkins/${id}/provision`,{method:'POST',body:JSON.stringify({confirm:true,projectName:'meoo2api-pool'})});
-          alert(r.ok?('已入池：'+r.key+''):('失败：'+(r.error||JSON.stringify(r))));}
-        finally{b.disabled=false;b.textContent='开项目';}
-        await refresh();return;}
-      if(act==='toggle')await admin(`/admin/api/checkins/${id}`,{method:'PATCH',body:JSON.stringify({enabled:!c.enabled})});
-      if(act==='del'){if(!confirm('删除该账号？'))return;await admin(`/admin/api/checkins/${id}`,{method:'DELETE'});}
+        alert('已创建并复制：\n'+r.key+'\n\n'+r.note);}
+      if(act==='onboard'){
+        if(!confirm('接入号池将执行：\n1) 建项目\n2) 开通云服务（占 1 个云服务额度）\n3) 取项目服务 AK 入池\n\n继续？'))return;
+        const r=await admin(`/admin/api/accounts/${id}/onboard`,{method:'POST'});
+        alert(r.ok?('已入池：'+r.key+'\n项目：'+r.project):('失败：'+(r.error||JSON.stringify(r))));}
+      if(act==='del'){if(!confirm('删除该账号？（池内项目 AK 不会自动删除）'))return;
+        await admin(`/admin/api/accounts/${id}`,{method:'DELETE'});}
       await refresh();
     }catch(e){alert(e.message);}
+    finally{b.disabled=false;b.textContent=old;}
   });
   tb.querySelectorAll('input[data-f=label]').forEach(inp=>inp.onchange=async()=>{
     const id=inp.closest('tr').dataset.id;
-    try{await admin(`/admin/api/checkins/${id}`,{method:'PATCH',body:JSON.stringify({label:inp.value})});}catch(e){alert(e.message);}
+    try{await admin(`/admin/api/accounts/${id}`,{method:'PATCH',body:JSON.stringify({label:inp.value})});}catch(e){alert(e.message);}
   });
-  // 号池账号区分
-  const keyAccs=[...new Set((SNAP.keys||[]).map(k=>k.account?.id).filter(Boolean))];
-  const ciAccs=[...new Set(list.map(c=>c.account?.id).filter(Boolean))];
-  const onlySession=ciAccs.filter(x=>!keyAccs.includes(x));
-  $('#accWarn').innerHTML = onlySession.length
-    ? `<div class="alert warn">● 签到账号 ${onlySession.length} 个不在密钥池中：积分只归该账号，模型调用仍走密钥池账号。<br><span class="muted">登录态账号：${onlySession.map(id=>{const c=list.find(x=>x.account?.id===id);return esc(c?c.account.name:id);}).join('、')}</span></div>`
+
+  const keyAccs=[...new Set((SNAP.keys||[]).map(k=>k.accountId).filter(Boolean))];
+  const orphan=list.filter(a=>(a.projectKeys||[]).length===0);
+  $('#accWarn').innerHTML = orphan.length
+    ? `<div class="alert warn">● ${orphan.length} 个账号还没有项目 AK：它们只能签到，模型调用仍需其他账号的项目 AK</div>`
     : '';
-  const pks=SNAP.personalKeys||[];
-  $('#pkBody').innerHTML=pks.map(p=>`<tr>
-    <td class="mono muted">${esc(p.accountId||'—')}</td>
-    <td class="mono">${esc(p.key)}</td>
-    <td class="muted">${(p.scopes||[]).length} 项</td>
-    <td class="mono">${new Date(p.createdAt).toLocaleString('zh-CN',{hour12:false})}</td>
-    <td><button class="btn sm" data-pk="${esc(p.id)}">复制</button></td></tr>`).join('')
-    ||'<tr><td colspan="5" class="muted" style="padding:12px">还没有创建过</td></tr>';
-  $('#pkBody').querySelectorAll('button[data-pk]').forEach(b=>b.onclick=async()=>{
-    const r=await admin('/admin/api/state?reveal=1');
-    const p=(r.personalKeys||[]).find(x=>x.id===b.dataset.pk);
-    if(p){navigator.clipboard?.writeText(p.key);alert('已复制：'+p.key);}
-  });
   $('#autoCi').checked=!!(SNAP.config.autoCheckin);
   $('#ciHour').value=SNAP.config.checkinHour??0;
   $('#ciKeep').value=SNAP.config.keepAliveHours||6;
-  const lastAuto = SNAP.lastAutoRun ? new Date(SNAP.lastAutoRun).toLocaleString('zh-CN',{hour12:false}) : '未运行';
-  $('#ciStat').innerHTML=`${list.length} 个账号 · 累计 ${list.reduce((a,c)=>a+(c.totalGranted||0),0)} 积分 · 自动签到 <span class="badge ${SNAP.config.autoCheckin?'ok':''}">${SNAP.config.autoCheckin?'开启':'关闭'}</span> · 上次自动 ${lastAuto}`;
+  $('#autoOnboard').checked=!!SNAP.config.autoOnboard;
+  $('#accStat').textContent=`${list.length} 个账号 · 池内项目 AK ${keyAccs.length} 个`;
+  $('#accStat').dataset.ok='1';
 }
-$('#openCiModal').onclick=()=>{$('#ciModal').classList.add('on');};
+$('#openAccModal').onclick=()=>{$('#ciModal').classList.add('on');};
 $('#ciCancel').onclick=()=>$('#ciModal').classList.remove('on');
 $('#addCi').onclick=async()=>{
   const cookie=$('#ciCookie').value.trim();
   if(!cookie){$('#ciMsg').textContent='先粘贴 Cookie';return;}
-  $('#addCi').disabled=true;$('#ciMsg').textContent='添加并签到中…';
+  $('#addCi').disabled=true;$('#ciMsg').textContent='识别中…';
   try{
-    const c=await admin('/admin/api/checkins',{method:'POST',body:JSON.stringify({label:$('#ciLabel').value.trim()||'账号',cookie})});
-    const r=await admin(`/admin/api/checkins/${c.id}/run`,{method:'POST'});
-    $('#ciMsg').innerHTML = r.ok
-      ? (r.granted?`<span class="badge ok">签到成功 +${r.amount}</span>`:'<span class="badge">今日已领</span>')
-      : `<span class="badge bad">${esc(r.error||'失败')}</span>`;
+    const a=await admin('/admin/api/accounts',{method:'POST',body:JSON.stringify({label:$('#ciLabel').value.trim()||'账号',cookie})});
+    $('#ciMsg').innerHTML=`<span class="badge ok">${esc(a.name||a.label)}</span>`;
     $('#ciCookie').value='';$('#ciLabel').value='';
     await refresh();
-    setTimeout(()=>{$('#ciModal').classList.remove('on');$('#ciMsg').textContent='';},1500);
+    setTimeout(()=>{$('#ciModal').classList.remove('on');$('#ciMsg').textContent='';},1200);
   }catch(e){$('#ciMsg').innerHTML=`<span class="badge bad">${esc(e.message)}</span>`;}
   finally{$('#addCi').disabled=false;}
 };
-$('#runAllCi').onclick=async()=>{
-  $('#runAllCi').disabled=true;$('#ciStat').textContent='签到中…';
-  try{const r=await admin('/admin/api/checkins-run-all',{method:'POST'});
+$('#runAllAcc').onclick=async()=>{
+  $('#runAllAcc').disabled=true;$('#accStat').textContent='签到中…';
+  try{const r=await admin('/admin/api/accounts-checkin-all',{method:'POST'});
     const ok=r.results.filter(x=>x.granted).length;
-    $('#ciStat').textContent=`完成：${ok} 个账号今日到账`;
-    await refresh();
-  }catch(e){$('#ciStat').textContent=e.message;}
-  finally{$('#runAllCi').disabled=false;}
+    $('#accStat').textContent=`完成：${ok} 个账号今日到账`;await refresh();
+  }catch(e){$('#accStat').textContent=e.message;}
+  finally{$('#runAllAcc').disabled=false;}
 };
 async function saveCiCfg(){
   await admin('/admin/api/config',{method:'PATCH',body:JSON.stringify({
     autoCheckin:$('#autoCi').checked,
     checkinHour:Number($('#ciHour').value)||0,
-    keepAliveHours:Number($('#ciKeep').value)||6})});
+    keepAliveHours:Number($('#ciKeep').value)||6,
+    autoOnboard:$('#autoOnboard').checked})});
   await refresh();
 }
 $('#autoCi').onchange=saveCiCfg;
 $('#ciHour').onchange=saveCiCfg;
 $('#ciKeep').onchange=saveCiCfg;
+$('#autoOnboard').onchange=saveCiCfg;
 
 /* ── 模型 / 别名 ── */
 function renderModels(){

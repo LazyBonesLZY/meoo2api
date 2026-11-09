@@ -106,14 +106,26 @@ docker compose up -d --build             # 或用容器
 「开项目」需要二次确认，会产生真实资源（PostgreSQL/Auth/Storage）。
 
 
-## 每日签到
+## 账号与签到
 
 Meoo 的每日登录积分（`daily_login`）不是 AK 能拿的：网页端打开时调用
 `GET /api/mc/entitlement/init`，响应里的 `dailyLoginGranted` / `dailyLoginGrantAmount` 就是当天发放结果。
 用 AK 请求该接口会被 `API_KEY_ROUTE_FORBIDDEN` 挡掉，所以本项目的签到走**网页登录态 Cookie**。
 
-在「每日签到」页粘贴 meoo.com 的 Cookie（F12 → Network → 任意请求的 Cookie 头），即可手动或自动领取。
+在「账号」页粘贴 meoo.com 的 Cookie（F12 → Network → 任意请求的 Cookie 头）即可。
 Cookie 存在 `data/state.json`（600），接口返回时只显示前 8 位。
+
+**账号是容器，签到只是它的一个动作**：
+
+```
+账号（Cookie + 个人 AK）
+  ├─ 签到 / 会话保活
+  ├─ 个人 AK（meoo_ak_）      ← 只能调 Open API，进不了模型池
+  └─ 项目 AK（meoo_project_） ← 只有这些进号池，模型调用走它们
+```
+
+「接入号池」一键完成：识别账号 → 建个人 AK（没有的话）→ 建项目 → 开云服务 → 取项目 AK → 入池并绑定账号。
+勾选「新账号自动接入号池」后，添加账号即自动执行这条链。
 
 ### 手机号登录（自动拿 Cookie）
 

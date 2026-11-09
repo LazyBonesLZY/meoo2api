@@ -59,6 +59,7 @@ func Load(dir, bootAK string, bootKeys []string) (*Store, string, error) {
 		}
 		s.Data.Config.AdminPass = model.ShaHex(pw)
 	}
+	s.migrate()
 	if len(s.Data.Keys) == 0 && bootAK != "" {
 		s.Data.Keys = append(s.Data.Keys, NewKey("bootstrap", bootAK, 1))
 	}
@@ -71,6 +72,52 @@ func Load(dir, bootAK string, bootKeys []string) (*Store, string, error) {
 		return nil, "", err
 	}
 	return s, generated, nil
+}
+
+// migrate 把旧的 checkins 结构升级为 accounts
+func (s *Store) migrate() {
+	if len(s.Data.Accounts) == 0 && len(s.Data.Checkins) > 0 {
+		for _, c := range s.Data.Checkins {
+			acc := &model.Account{
+				ID: model.RandID("a_", 6), Label: c.Label, Cookie: c.Cookie, Enabled: c.Enabled,
+				CreatedAt: c.CreatedAt, LastGrantDate: c.LastGrantDate, TotalGranted: c.TotalGranted,
+				GrantCount: c.GrantCount, Last: c.Last, PersonalKeyIDs: []string{}, ProjectKeyIDs: []string{},
+			}
+			if c.Account != nil {
+				acc.UserID = c.Account.ID
+				acc.Name = c.Account.Name
+			}
+			s.Data.Accounts = append(s.Data.Accounts, acc)
+		}
+	}
+	// 个人 AK 挂到账号
+	for _, pk := range s.Data.PersonalKeys {
+		for _, a := range s.Data.Accounts {
+			if pk.AccountID == a.UserID || pk.AccountID == a.ID {
+				found := false
+				for _, id := range a.PersonalKeyIDs {
+					if id == pk.ID {
+						found = true
+					}
+				}
+				if !found {
+					a.PersonalKeyIDs = append(a.PersonalKeyIDs, pk.ID)
+				}
+			}
+		}
+	}
+	// 池内 key 反查所属账号
+	for _, k := range s.Data.Keys {
+		if k.AccountID != "" {
+			continue
+		}
+		for _, a := range s.Data.Accounts {
+			if k.Account != nil && (k.Account.ID == a.UserID || k.Account.ID == a.ID) {
+				k.AccountID = a.ID
+				a.ProjectKeyIDs = append(a.ProjectKeyIDs, k.ID)
+			}
+		}
+	}
 }
 
 func NewKey(label, key string, weight int) *model.Key {

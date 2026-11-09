@@ -159,11 +159,11 @@ func (h *Handler) route(w http.ResponseWriter, r *http.Request, path string, rev
 		write(w, 200, map[string]any{"id": c.ID, "label": c.Label, "key": c.Key})
 	case strings.HasPrefix(path, "/admin/api/client-keys/"):
 		h.clientKeyRoute(w, r, strings.TrimPrefix(path, "/admin/api/client-keys/"))
-	case path == "/admin/api/checkins":
-		h.checkinRoot(w, r)
-	case strings.HasPrefix(path, "/admin/api/checkins/"):
-		h.checkinRoute(w, r, strings.TrimPrefix(path, "/admin/api/checkins/"))
-	case path == "/admin/api/checkins-run-all" && r.Method == http.MethodPost:
+	case path == "/admin/api/accounts":
+		h.accountRoot(w, r)
+	case strings.HasPrefix(path, "/admin/api/accounts/"):
+		h.accountRoute(w, r, strings.TrimPrefix(path, "/admin/api/accounts/"))
+	case path == "/admin/api/accounts-checkin-all" && r.Method == http.MethodPost:
 		write(w, 200, map[string]any{"results": checkin.RunAll(h.St, true)})
 	case path == "/admin/api/aliases":
 		h.aliasRoute(w, r)
@@ -191,7 +191,7 @@ func (h *Handler) state(w http.ResponseWriter, reveal bool, now int64) {
 		keys = append(keys, map[string]any{
 			"id": k.ID, "label": k.Label, "key": kv, "enabled": k.Enabled, "weight": k.Weight,
 			"note": k.Note, "createdAt": k.CreatedAt, "health": k.Health, "stats": k.Stats,
-			"cooldownUntil": k.CooldownUntil, "account": k.Account,
+			"cooldownUntil": k.CooldownUntil, "account": k.Account, "accountId": k.AccountID,
 			"cooling": max64(0, (k.CooldownUntil-now)/1000),
 		})
 	}
@@ -204,16 +204,35 @@ func (h *Handler) state(w http.ResponseWriter, reveal bool, now int64) {
 		cks = append(cks, map[string]any{"id": c.ID, "label": c.Label, "key": kv,
 			"enabled": c.Enabled, "createdAt": c.CreatedAt, "stats": c.Stats})
 	}
-	cis := []map[string]any{}
-	for _, c := range h.St.Data.Checkins {
-		ck := c.Cookie
+	acs := []map[string]any{}
+	for _, a := range h.St.Data.Accounts {
+		ck := a.Cookie
 		if !reveal && len(ck) > 12 {
 			ck = ck[:8] + "…(" + strconv.Itoa(len(ck)) + ")"
 		}
-		cis = append(cis, map[string]any{"id": c.ID, "label": c.Label, "cookie": ck, "enabled": c.Enabled,
-			"createdAt": c.CreatedAt, "lastGrantDate": c.LastGrantDate, "totalGranted": c.TotalGranted,
-			"grantCount": c.GrantCount, "last": c.Last, "account": c.Account,
-			"lastPing": c.LastPing, "pingOk": c.PingOK, "expired": c.Expired})
+		pks := []map[string]any{}
+		for _, id := range a.PersonalKeyIDs {
+			for _, pk := range h.St.Data.PersonalKeys {
+				if pk.ID == id {
+					pks = append(pks, map[string]any{"id": pk.ID, "key": model.Mask(pk.Key), "scopes": len(pk.Scopes)})
+				}
+			}
+		}
+		projs := []map[string]any{}
+		for _, id := range a.ProjectKeyIDs {
+			for _, k := range h.St.Data.Keys {
+				if k.ID == id {
+					projs = append(projs, map[string]any{"id": k.ID, "label": k.Label, "key": model.Mask(k.Key), "health": k.Health.State})
+				}
+			}
+		}
+		acs = append(acs, map[string]any{
+			"id": a.ID, "label": a.Label, "userId": a.UserID, "name": a.Name, "cookie": ck,
+			"enabled": a.Enabled, "createdAt": a.CreatedAt, "lastPing": a.LastPing,
+			"pingOk": a.PingOK, "expired": a.Expired, "lastGrantDate": a.LastGrantDate,
+			"totalGranted": a.TotalGranted, "grantCount": a.GrantCount, "last": a.Last,
+			"personalKeys": pks, "projectKeys": projs,
+		})
 	}
 	pks := []map[string]any{}
 	for _, p := range h.St.Data.PersonalKeys {
@@ -230,7 +249,7 @@ func (h *Handler) state(w http.ResponseWriter, reveal bool, now int64) {
 		"config":       cfg,
 		"keys":         keys,
 		"clientKeys":   cks,
-		"checkins":     cis,
+		"accounts":     acs,
 		"personalKeys": pks,
 		"lastAutoRun":  h.St.Data.LastAutoRun,
 		"models":       model.NativeModels,
@@ -367,20 +386,16 @@ func (h *Handler) clientKeyRoute(w http.ResponseWriter, r *http.Request, rest st
 	}
 }
 
-func (h *Handler) checkinRoot(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) accountRoot(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		h.St.Mu.RLock()
 		list := []map[string]any{}
-		for _, c := range h.St.Data.Checkins {
-			ck := c.Cookie
-			if len(ck) > 12 {
-				ck = ck[:8] + "…(" + strconv.Itoa(len(ck)) + ")"
-			}
-			list = append(list, map[string]any{"id": c.ID, "label": c.Label, "cookie": ck,
-				"enabled": c.Enabled, "last": c.Last, "account": c.Account})
+		for _, a := range h.St.Data.Accounts {
+			list = append(list, map[string]any{"id": a.ID, "label": a.Label, "userId": a.UserID,
+				"name": a.Name, "enabled": a.Enabled, "expired": a.Expired, "pingOk": a.PingOK})
 		}
 		h.St.Mu.RUnlock()
-		write(w, 200, map[string]any{"checkins": list})
+		write(w, 200, map[string]any{"accounts": list})
 		return
 	}
 	var in struct{ Label, Cookie string }
@@ -390,128 +405,103 @@ func (h *Handler) checkinRoot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.Label == "" {
-		in.Label = "我的账号"
+		in.Label = "未命名"
 	}
-	c := &model.Checkin{ID: model.RandID("ci_", 6), Label: in.Label, Cookie: strings.TrimSpace(in.Cookie),
-		Enabled: true, CreatedAt: time.Now().UnixMilli()}
+	a := &model.Account{ID: model.RandID("a_", 6), Label: in.Label, Cookie: strings.TrimSpace(in.Cookie),
+		Enabled: true, CreatedAt: time.Now().UnixMilli(), PersonalKeyIDs: []string{}, ProjectKeyIDs: []string{}}
 	h.St.Mu.Lock()
-	h.St.Data.Checkins = append(h.St.Data.Checkins, c)
+	h.St.Data.Accounts = append(h.St.Data.Accounts, a)
 	h.St.Mu.Unlock()
+	_ = h.Acc.Identify(a)
+	_, _ = h.Acc.Ping(a)
 	_ = h.St.Save()
-	write(w, 200, map[string]any{"id": c.ID, "label": c.Label})
+	if h.St.Data.Config.AutoOnboard {
+		go func() { _, _ = h.Acc.Onboard(a) }()
+	}
+	write(w, 200, map[string]any{"id": a.ID, "label": a.Label, "userId": a.UserID, "name": a.Name})
 }
 
-func (h *Handler) checkinRoute(w http.ResponseWriter, r *http.Request, rest string) {
+func (h *Handler) accountRoute(w http.ResponseWriter, r *http.Request, rest string) {
 	parts := strings.SplitN(rest, "/", 2)
 	id := parts[0]
 	sub := ""
 	if len(parts) > 1 {
 		sub = "/" + parts[1]
 	}
-	var c *model.Checkin
-	h.St.Mu.RLock()
-	for _, x := range h.St.Data.Checkins {
-		if x.ID == id {
-			c = x
-		}
-	}
-	h.St.Mu.RUnlock()
-	if c == nil {
+	a := h.Acc.Find(id)
+	if a == nil {
 		write(w, 404, map[string]any{"error": "not found"})
 		return
 	}
 	switch {
-	case sub == "/run" && r.Method == http.MethodPost:
-		write(w, 200, checkin.Run(h.St, c))
 	case sub == "/identify" && r.Method == http.MethodPost:
-		acc, err := h.Acc.IdentifyCheckin(c)
-		if err != nil {
+		if err := h.Acc.Identify(a); err != nil {
 			write(w, 400, map[string]any{"error": err.Error()})
-		} else {
-			_ = h.St.Save()
-			write(w, 200, map[string]any{"account": acc})
-		}
-	case sub == "/create-key" && r.Method == http.MethodPost:
-		pk, err := h.Acc.CreatePersonalKey(c)
-		if err != nil {
-			write(w, 400, map[string]any{"error": err.Error()})
-		} else {
-			write(w, 200, map[string]any{"id": pk.ID, "key": pk.Key, "scopes": pk.Scopes,
-				"note": "个人 AK：可调 CLI / Open API，但不能进模型池"})
-		}
-	case sub == "/provision" && r.Method == http.MethodPost:
-		var in struct {
-			Confirm     bool   `json:"confirm"`
-			ProjectName string `json:"projectName"`
-			PersonalAK  string `json:"personalAK"`
-		}
-		readBody(r, &in)
-		if !in.Confirm {
-			write(w, 400, map[string]any{"error": "需要 confirm=true：会在该账号下新建项目并开通云服务（占用云服务额度）"})
 			return
 		}
-		ak := in.PersonalAK
-		if ak == "" {
-			h.St.Mu.RLock()
-			for _, p := range h.St.Data.PersonalKeys {
-				if p.AccountID == "" || (c.Account != nil && p.AccountID == c.Account.ID) {
-					ak = p.Key
-				}
-			}
-			h.St.Mu.RUnlock()
-		}
-		if ak == "" {
-			write(w, 400, map[string]any{"error": "没有可用的个人 AK，先点「创建 API Key」"})
-			return
-		}
-		name := in.ProjectName
-		if name == "" {
-			name = "meoo2api-pool"
-		}
-		out, err := h.Acc.ProvisionProject(ak, name, c.Account)
-		if err != nil {
-			write(w, 400, map[string]any{"error": err.Error()})
-		} else {
-			write(w, 200, out)
-		}
+		_ = h.St.Save()
+		write(w, 200, map[string]any{"userId": a.UserID, "name": a.Name})
 	case sub == "/ping" && r.Method == http.MethodPost:
-		ok, err := h.Acc.Ping(c)
+		ok, err := h.Acc.Ping(a)
 		msg := ""
 		if err != nil {
 			msg = err.Error()
 		}
 		_ = h.St.Save()
-		write(w, 200, map[string]any{"ok": ok, "error": msg, "lastPing": c.LastPing})
-	case sub == "/reveal":
-		write(w, 200, map[string]any{"cookie": c.Cookie})
+		write(w, 200, map[string]any{"ok": ok, "error": msg, "lastPing": a.LastPing})
+	case sub == "/checkin" && r.Method == http.MethodPost:
+		write(w, 200, checkin.Run(h.St, a))
+	case sub == "/personal-key" && r.Method == http.MethodPost:
+		pk, err := h.Acc.PersonalKey(a)
+		if err != nil {
+			write(w, 400, map[string]any{"error": err.Error()})
+			return
+		}
+		write(w, 200, map[string]any{"id": pk.ID, "key": pk.Key, "scopes": len(pk.Scopes),
+			"note": "个人 AK：可调 CLI / Open API，不能直接进模型池"})
+	case sub == "/onboard" && r.Method == http.MethodPost:
+		out, err := h.Acc.Onboard(a)
+		if err != nil {
+			code := 400
+			if out != nil {
+				code = 200
+			}
+			write(w, code, map[string]any{"error": err.Error(), "partial": out})
+			return
+		}
+		write(w, 200, out)
+	case sub == "/cookie":
+		write(w, 200, map[string]any{"cookie": a.Cookie})
 	case r.Method == http.MethodPatch:
 		var in map[string]any
 		readBody(r, &in)
 		h.St.Mu.Lock()
 		if v, ok := in["label"].(string); ok {
-			c.Label = v
+			a.Label = v
 		}
 		if v, ok := in["enabled"].(bool); ok {
-			c.Enabled = v
+			a.Enabled = v
 		}
 		if v, ok := in["cookie"].(string); ok && v != "" {
-			c.Cookie = v
+			a.Cookie = v
 		}
 		h.St.Mu.Unlock()
 		_ = h.St.Save()
 		write(w, 200, map[string]any{"ok": true})
 	case r.Method == http.MethodDelete:
 		h.St.Mu.Lock()
-		out := h.St.Data.Checkins[:0]
-		for _, x := range h.St.Data.Checkins {
+		out := h.St.Data.Accounts[:0]
+		for _, x := range h.St.Data.Accounts {
 			if x.ID != id {
 				out = append(out, x)
 			}
 		}
-		h.St.Data.Checkins = out
+		h.St.Data.Accounts = out
 		h.St.Mu.Unlock()
 		_ = h.St.Save()
 		write(w, 200, map[string]any{"ok": true})
+	default:
+		write(w, 404, map[string]any{"error": "unknown"})
 	}
 }
 
@@ -564,6 +554,9 @@ func (h *Handler) configRoute(w http.ResponseWriter, r *http.Request) {
 	}
 	if v, ok := in["autoCheckin"].(bool); ok {
 		h.St.Data.Config.AutoCheckin = v
+	}
+	if v, ok := in["autoOnboard"].(bool); ok {
+		h.St.Data.Config.AutoOnboard = v
 	}
 	if v, ok := in["hiddenModels"].([]any); ok {
 		list := []string{}
@@ -645,13 +638,14 @@ func (h *Handler) exportRoute(w http.ResponseWriter) {
 	h.St.Mu.RLock()
 	cfg := h.St.Data.Config
 	cfg.AdminPass = ""
-	cis := []map[string]any{}
-	for _, c := range h.St.Data.Checkins {
-		cis = append(cis, map[string]any{"id": c.ID, "label": c.Label, "cookie": "", "enabled": c.Enabled,
-			"createdAt": c.CreatedAt, "lastGrantDate": c.LastGrantDate, "totalGranted": c.TotalGranted, "grantCount": c.GrantCount})
+	acs := []map[string]any{}
+	for _, a := range h.St.Data.Accounts {
+		acs = append(acs, map[string]any{"id": a.ID, "label": a.Label, "userId": a.UserID, "name": a.Name,
+			"cookie": "", "enabled": a.Enabled, "lastGrantDate": a.LastGrantDate,
+			"totalGranted": a.TotalGranted, "grantCount": a.GrantCount})
 	}
 	out := map[string]any{"version": h.St.Data.Version, "config": cfg, "keys": h.St.Data.Keys,
-		"clientKeys": h.St.Data.ClientKeys, "checkins": cis, "logs": h.St.Data.Logs, "usage": h.St.Data.Usage}
+		"clientKeys": h.St.Data.ClientKeys, "accounts": acs, "logs": h.St.Data.Logs, "usage": h.St.Data.Usage}
 	h.St.Mu.RUnlock()
 	write(w, 200, out)
 }
