@@ -13,7 +13,7 @@ import (
 const (
 	deviceCreate = "https://meoo.com/api/v1/cli/auth/session"
 	devicePoll   = "https://meoo.com/api/v1/cli/auth/session/%s"
-	loginPage    = "https://meoo.com/cli-login?session_id=%s"
+	loginPage    = "https://meoo.com/cli/login?session_id=%s"
 )
 
 // StartDevice 创建 CLI 设备授权会话（无需凭证）

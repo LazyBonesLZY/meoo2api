@@ -182,7 +182,8 @@ pre{background:var(--bg2);border:1px solid var(--line);border-radius:9px;padding
   <h3>添加账号</h3>
   <div class="row">
     <button class="btn primary" id="devStart">浏览器授权登录</button>
-    <span class="muted" id="devMsg">在弹出页面点「授权」即可，无需命令行</span>
+    <button class="btn" id="devLoginFirst">先去 meoo.com 登录</button>
+    <span class="muted" id="devMsg">页面需已登录 meoo.com，未登录会被跳到首页</span>
   </div>
   <div id="devBox" style="display:none;margin-bottom:8px">
     <div class="muted">若没有自动弹出，手动打开：</div>
@@ -402,6 +403,7 @@ $('#devStart').onclick=async()=>{
   }catch(e){$('#devMsg').innerHTML=`<span class="badge bad">${esc(e.message)}</span>`;}
   finally{$('#devStart').disabled=false;}
 };
+$('#devLoginFirst').onclick=()=>window.open('https://meoo.com/','_blank','noopener');
 $('#addCancel').onclick=()=>$('#addModal').classList.remove('on');
 $('#addOk').onclick=async()=>{
   const cookie=$('#addCookie').value.trim();
