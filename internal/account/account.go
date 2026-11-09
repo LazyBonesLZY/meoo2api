@@ -89,6 +89,37 @@ func (s *Service) IdentifyCheckin(c *model.Checkin) (*model.Account, error) {
 	return acc, nil
 }
 
+// Ping 用登录态打一次轻量接口，兼作会话保活
+func (s *Service) Ping(c *model.Checkin) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	code, raw, err := s.Up.DoJSON(ctx, "GET", "https://meoo.com/api/v1/user/me", nil,
+		map[string]string{"Cookie": c.Cookie, "Referer": "https://meoo.com/"})
+	ok := false
+	if err == nil && code == 200 {
+		var d struct {
+			Data struct {
+				UserID string `json:"user_id"`
+			} `json:"data"`
+		}
+		_ = json.Unmarshal(raw, &d)
+		ok = d.Data.UserID != ""
+	}
+	s.St.Mu.Lock()
+	c.LastPing = time.Now().UnixMilli()
+	c.PingOK = ok
+	c.Expired = !ok
+	s.St.Mu.Unlock()
+	s.St.Touch()
+	if !ok {
+		if err != nil {
+			return false, err
+		}
+		return false, fmt.Errorf("会话已失效 HTTP %d", code)
+	}
+	return true, nil
+}
+
 func (s *Service) CreatePersonalKey(c *model.Checkin) (*model.PersonalKey, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

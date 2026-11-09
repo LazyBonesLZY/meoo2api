@@ -209,7 +209,8 @@ details summary{cursor:pointer;color:var(--dim);font-size:11.5px}
         <div class="row">
           <button class="btn primary" id="openCiModal">+ 添加账号</button>
           <button class="btn" id="runAllCi">全部签到</button>
-          <label class="chk"><input type="checkbox" id="autoCi"> 自动签到（每 <input id="ciInterval" type="number" value="6" style="width:52px"> 小时）</label>
+          <label class="chk"><input type="checkbox" id="autoCi"> 每天 <input id="ciHour" type="number" min="0" max="23" value="0" style="width:52px"> 点后领取一次</label>
+          <label class="chk">会话保活每 <input id="ciKeep" type="number" min="1" max="48" value="6" style="width:52px"> 小时</label>
           <span class="muted" id="ciStat"></span>
         </div>
         <div id="accWarn"></div>
@@ -587,7 +588,8 @@ function renderCheckins(){
       ? `<span class="muted"> ${last.skipReason==='ALREADY_GRANTED_TODAY'?'今日已领':esc(last.skipReason)}</span>` : '';
     return `<tr data-id="${c.id}">
       <td><input value="${esc(c.label)}" data-f="label" style="width:110px;padding:3px 6px"></td>
-      <td>${c.account?`<span title="${esc(c.account.id)}">${esc(c.account.name)}</span>`:'<span class="muted">未识别</span>'}</td>
+      <td>${c.account?`<span title="${esc(c.account.id)}">${esc(c.account.name)}</span>`:'<span class="muted">未识别</span>'}
+        ${c.expired?'<span class="badge bad">会话失效</span>':(c.lastPing?`<span class="badge ${c.pingOk?'ok':''}">保活 ${new Date(c.lastPing).toLocaleTimeString('zh-CN',{hour12:false})}</span>`:'')}</td>
       <td class="mono muted">${esc(c.cookie)}</td>
       <td>${todayGranted?'<span class="badge ok">已到账</span>':'<span class="badge warn">待领</span>'}</td>
       <td class="mono">${c.totalGranted||0}<span class="muted"> / ${c.grantCount||0}次</span></td>
@@ -595,6 +597,7 @@ function renderCheckins(){
       <td>
         <button class="btn sm" data-act="run">签到</button>
         <button class="btn sm" data-act="identify">识别</button>
+        <button class="btn sm" data-act="ping">保活</button>
         <button class="btn sm" data-act="createkey">建 AK</button>
         <button class="btn sm" data-act="provision">开项目</button>
         <button class="btn sm" data-act="toggle">${c.enabled?'停用':'启用'}</button>
@@ -613,6 +616,8 @@ function renderCheckins(){
         await refresh();return;}
       if(act==='identify'){const r=await admin(`/admin/api/checkins/${id}/identify`,{method:'POST'});
         alert('账号: '+(r.account?.name||'')+'\nID: '+(r.account?.id||''));await refresh();return;}
+      if(act==='ping'){const r=await admin(`/admin/api/checkins/${id}/ping`,{method:'POST'});
+        alert(r.ok?'会话有效（已保活）':'保活失败：'+(r.error||''));await refresh();return;}
       if(act==='createkey'){
         if(!confirm('在该账号下创建一个个人 API Key？\n（可调 CLI/Open API，但不能进模型池）'))return;
         const r=await admin(`/admin/api/checkins/${id}/create-key`,{method:'POST'});
@@ -655,7 +660,8 @@ function renderCheckins(){
     if(p){navigator.clipboard?.writeText(p.key);alert('已复制：'+p.key);}
   });
   $('#autoCi').checked=!!(SNAP.config.autoCheckin);
-  $('#ciInterval').value=SNAP.config.checkinIntervalH||6;
+  $('#ciHour').value=SNAP.config.checkinHour??0;
+  $('#ciKeep').value=SNAP.config.keepAliveHours||6;
   const lastAuto = SNAP.lastAutoRun ? new Date(SNAP.lastAutoRun).toLocaleString('zh-CN',{hour12:false}) : '未运行';
   $('#ciStat').innerHTML=`${list.length} 个账号 · 累计 ${list.reduce((a,c)=>a+(c.totalGranted||0),0)} 积分 · 自动签到 <span class="badge ${SNAP.config.autoCheckin?'ok':''}">${SNAP.config.autoCheckin?'开启':'关闭'}</span> · 上次自动 ${lastAuto}`;
 }
@@ -686,13 +692,16 @@ $('#runAllCi').onclick=async()=>{
   }catch(e){$('#ciStat').textContent=e.message;}
   finally{$('#runAllCi').disabled=false;}
 };
-$('#autoCi').onchange=async()=>{
-  await admin('/admin/api/config',{method:'PATCH',body:JSON.stringify({autoCheckin:$('#autoCi').checked,checkinIntervalH:Number($('#ciInterval').value)||6})});
+async function saveCiCfg(){
+  await admin('/admin/api/config',{method:'PATCH',body:JSON.stringify({
+    autoCheckin:$('#autoCi').checked,
+    checkinHour:Number($('#ciHour').value)||0,
+    keepAliveHours:Number($('#ciKeep').value)||6})});
   await refresh();
-};
-$('#ciInterval').onchange=async()=>{
-  await admin('/admin/api/config',{method:'PATCH',body:JSON.stringify({checkinIntervalH:Number($('#ciInterval').value)||6})});
-};
+}
+$('#autoCi').onchange=saveCiCfg;
+$('#ciHour').onchange=saveCiCfg;
+$('#ciKeep').onchange=saveCiCfg;
 
 /* ── 模型 / 别名 ── */
 function renderModels(){
@@ -813,7 +822,13 @@ $('#send').onclick=async()=>{
       $('#chatStat').textContent=`${Math.round(performance.now()-t0)}ms`+(usage?` · tokens ${usage.prompt_tokens}/${usage.completion_tokens}`:'');
     }else{
       const {data,ms}=await callApi('/chat/completions',{model,max_tokens:Number($('#mt').value)||800,temperature:Number($('#temp').value),messages:[{role:'user',content:text}]});
-      bubble($('#chatLog'),data.model||model,(data.choices?.[0]?.message?.content||'').trim());
+      const msg0=data.choices?.[0]?.message||{};
+      const host=bubble($('#chatLog'),data.model||model,(msg0.content||'').trim());
+      if(msg0.reasoning_content){
+        const det=document.createElement('details');
+        det.innerHTML=`<summary>reasoning ${msg0.reasoning_content.length} 字</summary><pre>${esc(msg0.reasoning_content)}</pre>`;
+        host.d.append(det);
+      }
       $('#chatStat').textContent=`${ms}ms · tokens ${data.usage?.prompt_tokens}/${data.usage?.completion_tokens}`;
     }
   }catch(e){bubble($('#chatLog'),'错误',e.message);}

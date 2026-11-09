@@ -77,6 +77,9 @@ type Checkin struct {
 	GrantCount    int64        `json:"grantCount"`
 	Last          *CheckinLast `json:"last"`
 	Account       *Account     `json:"account,omitempty"`
+	LastPing      int64        `json:"lastPing"`
+	PingOK        bool         `json:"pingOk"`
+	Expired       bool         `json:"expired"`
 }
 
 type PersonalKey struct {
@@ -101,7 +104,8 @@ type Config struct {
 	AdminUser        string            `json:"adminUser"`
 	AdminPass        string            `json:"adminPass"`
 	AutoCheckin      bool              `json:"autoCheckin"`
-	CheckinIntervalH int               `json:"checkinIntervalH"`
+	CheckinHour      int               `json:"checkinHour"`
+	KeepAliveHours   int               `json:"keepAliveHours"`
 }
 
 type LogRow struct {

@@ -25,7 +25,7 @@ func defaults() *model.State {
 		Config: model.Config{
 			TimeoutMs: 180000, DefaultMaxTokens: 800, CooldownSec: 60, HardCooldownSec: 900,
 			MaxLogs: 2000, MaxUsageHours: 168, Aliases: model.DefaultAliases(),
-			HiddenModels: []string{}, AdminUser: "admin", CheckinIntervalH: 6,
+			HiddenModels: []string{}, AdminUser: "admin", CheckinHour: 0, KeepAliveHours: 6,
 		},
 		Keys: []*model.Key{}, ClientKeys: []*model.ClientKey{}, Checkins: []*model.Checkin{},
 		PersonalKeys: []*model.PersonalKey{}, Logs: []*model.LogRow{}, Usage: map[string]*model.Bucket{},

@@ -212,7 +212,8 @@ func (h *Handler) state(w http.ResponseWriter, reveal bool, now int64) {
 		}
 		cis = append(cis, map[string]any{"id": c.ID, "label": c.Label, "cookie": ck, "enabled": c.Enabled,
 			"createdAt": c.CreatedAt, "lastGrantDate": c.LastGrantDate, "totalGranted": c.TotalGranted,
-			"grantCount": c.GrantCount, "last": c.Last, "account": c.Account})
+			"grantCount": c.GrantCount, "last": c.Last, "account": c.Account,
+			"lastPing": c.LastPing, "pingOk": c.PingOK, "expired": c.Expired})
 	}
 	pks := []map[string]any{}
 	for _, p := range h.St.Data.PersonalKeys {
@@ -473,6 +474,14 @@ func (h *Handler) checkinRoute(w http.ResponseWriter, r *http.Request, rest stri
 		} else {
 			write(w, 200, out)
 		}
+	case sub == "/ping" && r.Method == http.MethodPost:
+		ok, err := h.Acc.Ping(c)
+		msg := ""
+		if err != nil {
+			msg = err.Error()
+		}
+		_ = h.St.Save()
+		write(w, 200, map[string]any{"ok": ok, "error": msg, "lastPing": c.LastPing})
 	case sub == "/reveal":
 		write(w, 200, map[string]any{"cookie": c.Cookie})
 	case r.Method == http.MethodPatch:
@@ -548,7 +557,8 @@ func (h *Handler) configRoute(w http.ResponseWriter, r *http.Request) {
 	num("hardCooldownSec", &h.St.Data.Config.HardCooldownSec)
 	num("maxLogs", &h.St.Data.Config.MaxLogs)
 	num("maxUsageHours", &h.St.Data.Config.MaxUsageHours)
-	num("checkinIntervalH", &h.St.Data.Config.CheckinIntervalH)
+	num("checkinHour", &h.St.Data.Config.CheckinHour)
+	num("keepAliveHours", &h.St.Data.Config.KeepAliveHours)
 	if v, ok := in["sticky"].(bool); ok {
 		h.St.Data.Config.Sticky = v
 	}

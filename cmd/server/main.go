@@ -55,12 +55,13 @@ func main() {
 	}
 
 	go st.SaveLoop()
-	checkin.StartScheduler(st)
 
 	up := upstream.New(base)
+	acc := &account.Service{St: st, Up: up}
 	picker := &pool.Picker{St: st, Up: up}
+	checkin.StartScheduler(st, acc.Ping)
 	gw := &gateway.Handler{St: st, Picker: picker, Up: up}
-	adm := &admin.Handler{St: st, Picker: picker, Acc: &account.Service{St: st, Up: up},
+	adm := &admin.Handler{St: st, Picker: picker, Acc: acc,
 		Tokens: admin.NewTokens(), Start: time.Now()}
 	html := webui.Index()
 

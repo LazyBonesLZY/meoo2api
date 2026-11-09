@@ -95,7 +95,6 @@ func RunAll(st *store.Store, force bool) []Result {
 	out := []Result{}
 	st.Mu.RLock()
 	list := append([]*model.Checkin(nil), st.Data.Checkins...)
-	interval := int64(st.Data.Config.CheckinIntervalH)
 	st.Mu.RUnlock()
 	for _, c := range list {
 		if !c.Enabled {
@@ -105,37 +104,54 @@ func RunAll(st *store.Store, force bool) []Result {
 			out = append(out, Result{ID: c.ID, Label: c.Label, Skipped: "今日已到账"})
 			continue
 		}
-		if !force && c.Last != nil && time.Now().UnixMilli()-c.Last.At < interval*3600*1000 {
-			continue
-		}
 		out = append(out, Result{ID: c.ID, Label: c.Label, CheckinLast: Run(st, c)})
 	}
 	_ = st.Save()
 	return out
 }
 
-// StartScheduler 启动 45 秒后先跑一轮，此后每 30 分钟检查一次
-func StartScheduler(st *store.Store) {
+// StartScheduler 每天在 checkinHour 后领一次，其余时间只做会话保活。
+// 不需要外部 cron：调度、保活都在进程内完成。
+func StartScheduler(st *store.Store, ping func(*model.Checkin) (bool, error)) {
 	go func() {
-		tick := func() {
-			st.Mu.RLock()
-			on := st.Data.Config.AutoCheckin
-			st.Mu.RUnlock()
-			if !on {
-				return
-			}
-			RunAll(st, false)
-			st.Mu.Lock()
-			st.Data.LastAutoRun = time.Now().UnixMilli()
-			st.Mu.Unlock()
-			st.Touch()
-		}
-		time.Sleep(45 * time.Second)
-		tick()
-		t := time.NewTicker(30 * time.Minute)
+		t := time.NewTicker(5 * time.Minute)
 		defer t.Stop()
-		for range t.C {
-			tick()
+		for {
+			run(st, ping)
+			<-t.C
 		}
 	}()
+}
+
+func run(st *store.Store, ping func(*model.Checkin) (bool, error)) {
+	st.Mu.RLock()
+	on := st.Data.Config.AutoCheckin
+	hour := st.Data.Config.CheckinHour
+	keep := st.Data.Config.KeepAliveHours
+	list := append([]*model.Checkin(nil), st.Data.Checkins...)
+	st.Mu.RUnlock()
+
+	now := time.Now()
+	for _, c := range list {
+		if !c.Enabled {
+			continue
+		}
+		if c.Expired {
+			continue
+		}
+		// 保活：隔 keep 小时打一次轻量接口
+		if keep > 0 && (c.LastPing == 0 || now.UnixMilli()-c.LastPing > int64(keep)*3600*1000) {
+			if ping != nil {
+				_, _ = ping(c)
+			}
+		}
+		// 签到：每天一次，过了设定的整点才领
+		if on && now.Hour() >= hour && c.LastGrantDate != model.Today() {
+			Run(st, c)
+		}
+	}
+	st.Mu.Lock()
+	st.Data.LastAutoRun = now.UnixMilli()
+	st.Mu.Unlock()
+	st.Touch()
 }
