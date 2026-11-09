@@ -164,6 +164,7 @@ func (s *State) AdminRoute(w http.ResponseWriter, r *http.Request, path string, 
 		writeJSON(w, 200, map[string]any{
 			"config": cfg, "keys": keys, "clientKeys": cks, "checkins": cis,
 			"personalKeys": pks,
+			"lastAutoRun":  s.LastAutoRun,
 			"models":       NativeModels, "alerts": s.Alerts(), "uptime": time.Since(startedAt).Seconds(),
 		})
 		return true

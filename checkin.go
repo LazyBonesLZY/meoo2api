@@ -66,10 +66,14 @@ func RunCheckin(s *State, c *Checkin) CheckinLast {
 				}
 				last.SkipReason = d.Data.DailyLoginSkipReason
 				last.BalanceAfter = d.Data.BalanceAfter
-				if last.Granted {
+				switch {
+				case last.Granted:
 					c.LastGrantDate = today()
 					c.TotalGranted += last.Amount
 					c.GrantCount++
+				case last.SkipReason == "ALREADY_GRANTED_TODAY":
+					// 今天已在网页端领过，记下来避免每 6 小时重复打一次
+					c.LastGrantDate = today()
 				}
 			}
 		}
@@ -113,12 +117,26 @@ func RunAllCheckins(s *State, force bool) []CheckinResult {
 
 func StartCheckinScheduler(s *State) {
 	go func() {
+		// 启动后先跑一次，避免等满一个周期
+		time.Sleep(45 * time.Second)
+		if s.Config.AutoCheckin {
+			RunAllCheckins(s, false)
+			s.mu.Lock()
+			s.LastAutoRun = time.Now().UnixMilli()
+			s.mu.Unlock()
+			s.Touch()
+		}
 		t := time.NewTicker(30 * time.Minute)
 		defer t.Stop()
 		for range t.C {
-			if s.Config.AutoCheckin {
-				RunAllCheckins(s, false)
+			if !s.Config.AutoCheckin {
+				continue
 			}
+			RunAllCheckins(s, false)
+			s.mu.Lock()
+			s.LastAutoRun = time.Now().UnixMilli()
+			s.mu.Unlock()
+			s.Touch()
 		}
 	}()
 }

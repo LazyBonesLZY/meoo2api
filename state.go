@@ -127,6 +127,7 @@ type State struct {
 	PersonalKeys []*PersonalKey     `json:"personalKeys"`
 	Logs         []*LogRow          `json:"logs"`
 	Usage        map[string]*Bucket `json:"usage"`
+	LastAutoRun  int64              `json:"lastAutoRun"`
 	mu           sync.RWMutex
 	dir          string
 	dirty        chan struct{}

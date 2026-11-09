@@ -159,6 +159,21 @@ systemctl --user start meoo2api
 
 「开项目」需要二次确认，会产生真实资源（PostgreSQL/Auth/Storage）。
 
+### 自动签到
+
+服务内置调度：每 30 分钟检查一次，进程启动 45 秒后先跑一轮。
+
+- 条件：`autoCheckin=true` 且该账号 `lastGrantDate != 今天` 且距上次尝试超过 `checkinIntervalH`
+- 结果 `ALREADY_GRANTED_TODAY` 时也会把 `lastGrantDate` 记为今天，避免一天内反复请求
+- 跨天后的第一个 tick（≤30 分钟）会真正领取当日积分
+- 控制台「每日签到」页显示：自动签到开关、间隔、上次自动运行时间
+
+外部定时器（可选，和内置调度二选一）：
+
+```bash
+10 8 * * * cd ~/meoo2api && /usr/bin/node login.mjs --headless --api http://127.0.0.1:8791 --password '***' >> login.log 2>&1
+```
+
 ## 每日签到
 
 Meoo 的每日登录积分（`daily_login`）不是 AK 能拿的：网页端打开时调用

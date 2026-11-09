@@ -656,7 +656,8 @@ function renderCheckins(){
   });
   $('#autoCi').checked=!!(SNAP.config.autoCheckin);
   $('#ciInterval').value=SNAP.config.checkinIntervalH||6;
-  $('#ciStat').textContent=`${list.length} 个账号 · 累计 ${list.reduce((a,c)=>a+(c.totalGranted||0),0)} 积分`;
+  const lastAuto = SNAP.lastAutoRun ? new Date(SNAP.lastAutoRun).toLocaleString('zh-CN',{hour12:false}) : '未运行';
+  $('#ciStat').innerHTML=`${list.length} 个账号 · 累计 ${list.reduce((a,c)=>a+(c.totalGranted||0),0)} 积分 · 自动签到 <span class="badge ${SNAP.config.autoCheckin?'ok':''}">${SNAP.config.autoCheckin?'开启':'关闭'}</span> · 上次自动 ${lastAuto}`;
 }
 $('#openCiModal').onclick=()=>{$('#ciModal').classList.add('on');};
 $('#ciCancel').onclick=()=>$('#ciModal').classList.remove('on');
