@@ -1,0 +1,16 @@
+services:
+  meoo2api:
+    build: .
+    container_name: meoo2api
+    restart: unless-stopped
+    ports:
+      - "8791:8791"
+    volumes:
+      - ./data:/app/data
+    environment:
+      BIND: 0.0.0.0
+      PORT: "8791"
+      DATA_DIR: /app/data
+      # MEOO_PROJECT_AK: meoo_project_xxx
+      # MEOO2API_KEYS: sk-xxx
+      # MEOO2API_ADMIN_PASSWORD: change-me

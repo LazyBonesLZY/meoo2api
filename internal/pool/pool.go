@@ -1,25 +1,30 @@
-package main
+// Package pool 负责 key 池调度：权重轮询、粘性、冷却与探活。
+package pool
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"time"
+
+	"meoo2api/internal/model"
+	"meoo2api/internal/store"
+	"meoo2api/internal/upstream"
 )
 
 type Picker struct {
-	s      *State
-	rr     int
-	sticky string
+	St     *store.Store
+	Up     *upstream.Client
+	RR     int
+	Sticky string
 }
 
-func (p *Picker) Usable() []*Key {
+func (p *Picker) Usable() []*model.Key {
 	now := time.Now().UnixMilli()
-	p.s.mu.RLock()
-	defer p.s.mu.RUnlock()
-	out := []*Key{}
-	for _, k := range p.s.Keys {
+	p.St.Mu.RLock()
+	defer p.St.Mu.RUnlock()
+	out := []*model.Key{}
+	for _, k := range p.St.Data.Keys {
 		if k.Enabled && k.Key != "" && k.CooldownUntil <= now {
 			out = append(out, k)
 		}
@@ -27,19 +32,19 @@ func (p *Picker) Usable() []*Key {
 	return out
 }
 
-func (p *Picker) Pick() *Key {
+func (p *Picker) Pick() *model.Key {
 	list := p.Usable()
 	if len(list) == 0 {
 		return nil
 	}
-	if p.s.Config.Sticky && p.sticky != "" {
+	if p.St.Data.Config.Sticky && p.Sticky != "" {
 		for _, k := range list {
-			if k.ID == p.sticky {
+			if k.ID == p.Sticky {
 				return k
 			}
 		}
 	}
-	pool := []*Key{}
+	expanded := []*model.Key{}
 	for _, k := range list {
 		w := k.Weight
 		if w < 1 {
@@ -49,21 +54,21 @@ func (p *Picker) Pick() *Key {
 			w = 5
 		}
 		for i := 0; i < w; i++ {
-			pool = append(pool, k)
+			expanded = append(expanded, k)
 		}
 	}
-	k := pool[p.rr%len(pool)]
-	p.rr++
-	p.sticky = k.ID
+	k := expanded[p.RR%len(expanded)]
+	p.RR++
+	p.Sticky = k.ID
 	return k
 }
 
-func (s *State) MarkKey(k *Key, ok bool, soft bool) {
+func (p *Picker) MarkKey(k *model.Key, ok bool, soft bool) {
 	if k == nil {
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	p.St.Mu.Lock()
+	defer p.St.Mu.Unlock()
 	k.Stats.Req++
 	k.Stats.LastUsed = time.Now().UnixMilli()
 	if ok {
@@ -72,24 +77,23 @@ func (s *State) MarkKey(k *Key, ok bool, soft bool) {
 		return
 	}
 	k.Stats.Fail++
-	cool := s.Config.HardCooldownSec
+	cool := p.St.Data.Config.HardCooldownSec
 	if soft {
-		cool = s.Config.CooldownSec
+		cool = p.St.Data.Config.CooldownSec
 	}
 	k.CooldownUntil = time.Now().UnixMilli() + int64(cool)*1000
 }
 
-func (s *State) Probe(k *Key) Health {
+func (p *Picker) Probe(k *model.Key) model.Health {
 	t0 := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, apiBase+"/models", nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, p.Up.Base+"/models", nil)
 	req.Header.Set("Authorization", "Bearer "+k.Key)
-	h := Health{CheckedAt: time.Now().UnixMilli()}
+	h := model.Health{CheckedAt: time.Now().UnixMilli()}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		h.State = "error"
-		h.Error = err.Error()
+		h.State, h.Error = "error", err.Error()
 	} else {
 		defer resp.Body.Close()
 		h.LatencyMs = time.Since(t0).Milliseconds()
@@ -101,15 +105,15 @@ func (s *State) Probe(k *Key) Health {
 			if resp.StatusCode == 401 || resp.StatusCode == 403 {
 				h.State = "invalid"
 			}
-			h.Error = fmt.Sprintf("HTTP %d %s", resp.StatusCode, string(body))
+			h.Error = resp.Status + " " + string(body)
 		}
 	}
-	s.mu.Lock()
+	p.St.Mu.Lock()
 	k.Health = h
 	if h.State == "invalid" {
-		k.CooldownUntil = time.Now().UnixMilli() + int64(s.Config.HardCooldownSec)*1000
+		k.CooldownUntil = time.Now().UnixMilli() + int64(p.St.Data.Config.HardCooldownSec)*1000
 	}
-	s.mu.Unlock()
-	s.Touch()
+	p.St.Mu.Unlock()
+	p.St.Touch()
 	return h
 }

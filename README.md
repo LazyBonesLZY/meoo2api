@@ -49,84 +49,30 @@ WebUI 用 `go:embed` 打进二进制，不需要额外静态文件。
 ## 目录
 
 ```
-main.go state.go pool.go upstream.go openai.go admin.go checkin.go   Go 服务端
-webui.html                                                         控制台（embed）
-login.mjs                                                          浏览器登录取 Cookie
-nodejs/                                                            早期 Node 实现（保留）
+cmd/server/           入口（flag / env / 路由装配）
+internal/
+  model/              共用数据结构
+  store/              状态持久化（key 池 / 签到 / 日志 / 用量）
+  upstream/           Meoo 网关客户端与错误映射
+  pool/               key 调度：权重轮询、粘性、冷却、探活
+  gateway/            OpenAI 兼容面（chat / completions / responses）
+  admin/              控制台 API 与登录态
+  account/            账号识别、个人 AK、项目 AK 开通
+  checkin/            每日签到与调度
+  webui/              控制台页面（go:embed）
+scripts/build.sh      构建脚本
+Dockerfile / docker-compose.yml
+config.example.env    环境变量样例
+login.mjs             浏览器登录取 Cookie
+nodejs/               早期 Node 实现（保留）
 ```
+
+构建：
 
 ```bash
-curl http://127.0.0.1:8791/v1/chat/completions \
-  -H 'Authorization: Bearer sk-xxx' \
-  -H 'Content-Type: application/json' \
-  -d '{"model":"deepseek v4.1 flash","messages":[{"role":"user","content":"你好"}],"max_tokens":600}'
+./scripts/build.sh                       # 产出 bin/meoo2api
+docker compose up -d --build             # 或用容器
 ```
-
-```python
-from openai import OpenAI
-c = OpenAI(base_url="http://127.0.0.1:8791/v1", api_key="sk-xxx")
-c.chat.completions.create(model="deepseek v4.1 flash",
-    messages=[{"role": "user", "content": "你好"}], max_tokens=600)
-```
-
-## 环境变量
-
-| 变量 | 说明 |
-|---|---|
-| `MEOO_PROJECT_AK` | 可选，服务端统一持有的项目 AK；不填则只能 BYOK |
-| `MEOO2API_KEYS` | 可选，客户端 key（逗号分隔），命中后使用服务端的项目 AK |
-| `MEOO_AI_BASE` | 上游地址，默认 `https://api.meoo.host/meoo-ai/compatible-mode/v1` |
-| `PORT` / `BIND` | 默认 `8791` / `127.0.0.1` |
-| `UPSTREAM_TIMEOUT` | 上游超时，默认 180000ms |
-| `MAX_BODY_BYTES` | 请求体上限，默认 8MiB |
-| `LOG` | 访问日志路径，默认同目录 `meoo2api.log` |
-| `MEOO2API_ADMIN_PASSWORD` | 管理端密码；不设则首次启动随机生成 |
-
-## 项目服务 AK
-
-个人 AK（`meoo_ak_`）无法调用模型网关，需要项目服务 AK：
-
-```bash
-meoo login --ak meoo_ak_xxx
-meoo projects create "my-project"     # 记录 urlId
-meoo cloud enable                     # 开通云服务
-curl -s https://meoo.com/open/v1/cli-compat/projects/<urlId>/cloud/environment \
-  -H "Authorization: Bearer meoo_ak_xxx" | jq -r .data.meooProjectApiKey
-```
-
-## 控制台
-
-`http://127.0.0.1:8791/`，需要管理密码：首次启动时**在终端打印一次**（不落盘，只存 SHA-256 哈希），
-或用 `MEOO2API_ADMIN_PASSWORD` 指定。忘记密码：
-
-```bash
-systemctl --user stop meoo2api          # 必须先停，避免旧进程把 state 刷回去
-node meoo2api.mjs --reset-password      # 打印一次新密码
-systemctl --user start meoo2api
-```
-
-左侧导航 + 顶部状态，暗/亮主题。
-
-| 视图 | 功能 |
-|---|---|
-| 概览 | 请求总量、成功率、P95、可用 key、近 24h 柱状图、告警条、一键全部探活 |
-| 密钥池 | 点「+ 添加密钥」→ 只粘一把 `meoo_project_…` → 自动探活；备注、权重（1-5）、启停、解冷却、删除 |
-| 访问密钥 | 写给调用方的 key：生成、复制、停用、删除 |
-| 对话 | 流式/非流式、max_tokens、temperature、reasoning 折叠 |
-| 工具调用 | 内置 `get_weather` / `get_time` / `calc`，自动 tool_calls → 本地执行 → 回传 → 最终回答 |
-| 上下文隔离 | 连发两次独立请求，判定是否串味 |
-| 每日签到 | 用 meoo.com 网页 Cookie 领每日登录积分，支持手动/全部/自动（默认每 6 小时），显示累计积分 |
-| 模型 / 别名 | 上游模型清单、隐藏开关、别名增删 |
-| 用量 | 按小时聚合：请求/成功/失败/prompt/completion/P50/P95 |
-| 请求日志 | 服务端记录，按状态、request id、key 备注过滤 |
-| 设置 | 默认 max_tokens、超时、粘性、软/硬冷却、日志上限、管理密码、导出 state |
-
-### key 池行为
-
-- 按权重轮询；开启「粘性」后优先复用上一个 key
-- 上游 429/5xx → 软冷却（默认 60s）；401/403 → 硬冷却（默认 900s）
-- 探活会真实请求上游 `/models`，鉴权失败标记 `invalid` 并进入硬冷却
-- 没有可用 key 时返回 `503 no_available_key`；BYOK 请求不占池
 
 ## 账号模型（重要）
 

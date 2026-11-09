@@ -6,7 +6,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=%h/meoo2api
-ExecStart=%h/meoo2api/meoo2api
+# 只监听本机用 -bind 127.0.0.1；要对公网提供则用 0.0.0.0 并自行加防护
+ExecStart=%h/meoo2api/meoo2api -bind 0.0.0.0
 Environment=HOME=%h
 Restart=always
 RestartSec=3

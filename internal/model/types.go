@@ -1,14 +1,11 @@
-package main
+// Package model 定义控制台与网关共用的数据结构。
+package model
 
 import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"sort"
-	"sync"
 	"time"
 )
 
@@ -19,13 +16,19 @@ type Health struct {
 	Error     string `json:"error"`
 }
 
-type KeyStats struct {
+type Stats struct {
 	Req      int64 `json:"req"`
 	OK       int64 `json:"ok"`
 	Fail     int64 `json:"fail"`
 	PT       int64 `json:"pt"`
 	CT       int64 `json:"ct"`
 	LastUsed int64 `json:"lastUsed"`
+}
+
+type Account struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Kind string `json:"kind,omitempty"`
 }
 
 type Key struct {
@@ -37,18 +40,18 @@ type Key struct {
 	Note          string   `json:"note"`
 	CreatedAt     int64    `json:"createdAt"`
 	Health        Health   `json:"health"`
-	Stats         KeyStats `json:"stats"`
+	Stats         Stats    `json:"stats"`
 	CooldownUntil int64    `json:"cooldownUntil"`
 	Account       *Account `json:"account,omitempty"`
 }
 
 type ClientKey struct {
-	ID        string   `json:"id"`
-	Label     string   `json:"label"`
-	Key       string   `json:"key"`
-	Enabled   bool     `json:"enabled"`
-	CreatedAt int64    `json:"createdAt"`
-	Stats     KeyStats `json:"stats"`
+	ID        string `json:"id"`
+	Label     string `json:"label"`
+	Key       string `json:"key"`
+	Enabled   bool   `json:"enabled"`
+	CreatedAt int64  `json:"createdAt"`
+	Stats     Stats  `json:"stats"`
 }
 
 type CheckinLast struct {
@@ -74,6 +77,15 @@ type Checkin struct {
 	GrantCount    int64        `json:"grantCount"`
 	Last          *CheckinLast `json:"last"`
 	Account       *Account     `json:"account,omitempty"`
+}
+
+type PersonalKey struct {
+	ID        string   `json:"id"`
+	AccountID string   `json:"accountId"`
+	Name      string   `json:"name"`
+	Key       string   `json:"key"`
+	Scopes    []string `json:"scopes"`
+	CreatedAt int64    `json:"createdAt"`
 }
 
 type Config struct {
@@ -128,20 +140,12 @@ type State struct {
 	Logs         []*LogRow          `json:"logs"`
 	Usage        map[string]*Bucket `json:"usage"`
 	LastAutoRun  int64              `json:"lastAutoRun"`
-	mu           sync.RWMutex
-	dir          string
-	dirty        chan struct{}
 }
 
-func randID(prefix string, n int) string {
-	b := make([]byte, n)
-	_, _ = rand.Read(b)
-	return prefix + hex.EncodeToString(b)
-}
-
-func shaHex(s string) string {
-	h := sha256.Sum256([]byte(s))
-	return hex.EncodeToString(h[:])
+var NativeModels = []string{
+	"qwen3.8-flash", "qwen3.8-max", "qwen3.7-max", "qwen3.7-plus",
+	"deepseek-v4.1-flash-1017", "deepseek-v4-pro-0813", "deepseek-v4-flash-0731",
+	"glm-5.2-fast-preview", "glm-5.2",
 }
 
 func DefaultAliases() map[string]string {
@@ -160,180 +164,22 @@ func DefaultAliases() map[string]string {
 	}
 }
 
-func defaultState() *State {
-	return &State{
-		Version: 1,
-		Config: Config{
-			TimeoutMs:        180000,
-			DefaultMaxTokens: 800,
-			CooldownSec:      60,
-			HardCooldownSec:  900,
-			MaxLogs:          2000,
-			MaxUsageHours:    168,
-			Aliases:          DefaultAliases(),
-			HiddenModels:     []string{},
-			AdminUser:        "admin",
-			CheckinIntervalH: 6,
-		},
-		Keys:         []*Key{},
-		ClientKeys:   []*ClientKey{},
-		Checkins:     []*Checkin{},
-		PersonalKeys: []*PersonalKey{},
-		Logs:         []*LogRow{},
-		Usage:        map[string]*Bucket{},
-	}
+func RandID(prefix string, n int) string {
+	b := make([]byte, n)
+	_, _ = rand.Read(b)
+	return prefix + hex.EncodeToString(b)
 }
 
-func LoadState(dir, bootAK string, bootKeys []string) (*State, string, error) {
-	s := defaultState()
-	s.dir = dir
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, "", err
-	}
-	path := filepath.Join(dir, "state.json")
-	generated := ""
-	if b, err := os.ReadFile(path); err == nil {
-		if err := json.Unmarshal(b, s); err != nil {
-			s = defaultState()
-			s.dir = dir
-		}
-		if s.Config.Aliases == nil {
-			s.Config.Aliases = DefaultAliases()
-		}
-		if s.Usage == nil {
-			s.Usage = map[string]*Bucket{}
-		}
-	} else {
-		generated = ensureAdminPass(s)
-	}
-	if s.Config.AdminPass == "" {
-		if p := ensureAdminPass(s); p != "" {
-			generated = p
-		}
-	}
-	if len(s.Keys) == 0 && bootAK != "" {
-		s.Keys = append(s.Keys, NewKey("bootstrap", bootAK, 1))
-	}
-	if len(s.ClientKeys) == 0 {
-		for _, k := range bootKeys {
-			s.ClientKeys = append(s.ClientKeys, NewClientKey("bootstrap", k))
-		}
-	}
-	s.dirty = make(chan struct{}, 1)
-	_ = s.Save()
-	return s, generated, nil
+func ShaHex(s string) string {
+	h := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(h[:])
 }
 
-func ensureAdminPass(s *State) string {
-	pw := os.Getenv("MEOO2API_ADMIN_PASSWORD")
-	explicit := pw != ""
-	if !explicit {
-		pw = randID("", 9)
+func Mask(k string) string {
+	if len(k) <= 18 {
+		return k
 	}
-	s.Config.AdminPass = shaHex(pw)
-	if explicit {
-		return ""
-	}
-	return pw
-}
-
-func NewKey(label, key string, weight int) *Key {
-	if weight < 1 {
-		weight = 1
-	}
-	return &Key{
-		ID: randID("k_", 6), Label: label, Key: key, Enabled: true, Weight: weight,
-		CreatedAt: time.Now().UnixMilli(), Health: Health{State: "unknown"},
-	}
-}
-
-func NewClientKey(label, key string) *ClientKey {
-	if key == "" {
-		key = "sk-" + randID("", 16)
-	}
-	return &ClientKey{ID: randID("c_", 6), Label: label, Key: key, Enabled: true, CreatedAt: time.Now().UnixMilli()}
-}
-
-func (s *State) Save() error {
-	s.mu.RLock()
-	b, err := json.MarshalIndent(s, "", "  ")
-	s.mu.RUnlock()
-	if err != nil {
-		return err
-	}
-	tmp := filepath.Join(s.dir, "state.json.tmp")
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, filepath.Join(s.dir, "state.json"))
-}
-
-func (s *State) Touch() {
-	select {
-	case s.dirty <- struct{}{}:
-	default:
-	}
-}
-
-func (s *State) SaveLoop() {
-	t := time.NewTicker(3 * time.Second)
-	defer t.Stop()
-	for range t.C {
-		select {
-		case <-s.dirty:
-			_ = s.Save()
-		default:
-		}
-	}
-}
-
-func (s *State) Record(row *LogRow) {
-	now := time.Now()
-	if row.TS == 0 {
-		row.TS = now.UnixMilli()
-	}
-	if row.ID == "" {
-		row.ID = randID("r_", 5)
-	}
-	s.mu.Lock()
-	s.Logs = append([]*LogRow{row}, s.Logs...)
-	if len(s.Logs) > s.Config.MaxLogs {
-		s.Logs = s.Logs[:s.Config.MaxLogs]
-	}
-	h := now.Format("2006-01-02T15")
-	b := s.Usage[h]
-	if b == nil {
-		b = &Bucket{Lat: []float64{}, Models: map[string]int64{}}
-		s.Usage[h] = b
-	}
-	b.Req++
-	if row.Status < 400 {
-		b.OK++
-	} else {
-		b.Fail++
-	}
-	b.PT += row.PT
-	b.CT += row.CT
-	if row.Ms > 0 {
-		b.Lat = append(b.Lat, float64(row.Ms))
-		if len(b.Lat) > 500 {
-			b.Lat = b.Lat[1:]
-		}
-	}
-	if row.Model != "" {
-		b.Models[row.Model]++
-	}
-	hours := make([]string, 0, len(s.Usage))
-	for k := range s.Usage {
-		hours = append(hours, k)
-	}
-	sort.Strings(hours)
-	for len(hours) > s.Config.MaxUsageHours {
-		delete(s.Usage, hours[0])
-		hours = hours[1:]
-	}
-	s.mu.Unlock()
-	s.Touch()
+	return k[:14] + "…" + k[len(k)-4:]
 }
 
 func Percentile(lat []float64, p float64) int64 {
@@ -349,9 +195,4 @@ func Percentile(lat []float64, p float64) int64 {
 	return int64(cp[idx])
 }
 
-func Mask(k string) string {
-	if len(k) <= 18 {
-		return k
-	}
-	return k[:14] + "…" + k[len(k)-4:]
-}
+func Today() string { return time.Now().Format("2006-01-02") }
