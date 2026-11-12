@@ -53,12 +53,24 @@ func (p *Picker) Pick() *model.Key { return p.PickFor("") }
 
 // PickFor scopes affinity to a client identity, without retaining credentials.
 func (p *Picker) PickFor(callerID string) *model.Key {
+	return p.PickForExcluding(callerID, nil)
+}
+
+// PickForExcluding skips keys already attempted by the current client request,
+// so one unusable account cannot be selected twice in the same failover loop.
+func (p *Picker) PickForExcluding(callerID string, exclude map[string]bool) *model.Key {
 	p.St.Mu.Lock()
 	defer p.St.Mu.Unlock()
 	now := time.Now().UnixMilli()
 	list := []*model.Key{}
 	total := 0
 	for _, k := range p.St.Data.Keys {
+		if k == nil {
+			continue
+		}
+		if exclude[k.ID] {
+			continue
+		}
 		if p.usableLocked(k, now) {
 			list = append(list, k)
 			total += weight(k)
@@ -155,6 +167,35 @@ func (p *Picker) RecordKey(k *model.Key, ok, cooldown, soft bool, pt, ct int64) 
 	if current != nil {
 		p.St.Touch()
 	}
+}
+
+// ParkKey removes a key from rotation for d and records the reason. It is used
+// when the upstream account cannot serve requests at all (for example an empty
+// balance), so a client retry does not pay for one failed call per attempt.
+func (p *Picker) ParkKey(k *model.Key, d time.Duration, reason string) {
+	p.St.Mu.Lock()
+	current := p.currentLocked(k)
+	if current != nil {
+		until := time.Now().Add(d).UnixMilli()
+		if until > current.CooldownUntil {
+			current.CooldownUntil = until
+		}
+		current.Health.State = "error"
+		current.Health.Error = shortReason(reason)
+		current.Health.CheckedAt = time.Now().UnixMilli()
+	}
+	p.St.Mu.Unlock()
+	if current != nil {
+		p.St.Touch()
+	}
+}
+
+func shortReason(reason string) string {
+	const limit = 160
+	if len(reason) <= limit {
+		return reason
+	}
+	return strings.ToValidUTF8(reason[:limit], "")
 }
 
 func (p *Picker) MarkKey(k *model.Key, ok bool, soft bool) {

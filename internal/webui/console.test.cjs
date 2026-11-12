@@ -133,6 +133,18 @@ test('zero default output budget is displayed and saved without injection',async
   assert.equal(h.get('#cfgStat').textContent,'已保存');
 });
 
+test('parked account shows a readable cooldown with the upstream reason',()=>{
+  const h=harness();
+  installSnapshot(h,snapshot({accounts:[{id:'a',enabled:true,hasCookie:true,key:{enabled:true,key:'masked',health:'error',cooldown:1800,latencyMs:0,lastError:'账号积分余额不足，已暂停使用'}}]}));
+  const html=h.get('#accBody').innerHTML;
+  assert.match(html,/冷却 30 分钟/);
+  assert.match(html,/title="账号积分余额不足，已暂停使用"/);
+  assert.ok(!html.includes('undefined'));
+  // The reason is untrusted upstream text in the API response, so it must stay escaped.
+  installSnapshot(h,snapshot({accounts:[{id:'b',enabled:true,hasCookie:true,key:{enabled:true,key:'masked',health:'error',cooldown:60,lastError:'"><img src=x onerror=alert(1)>'}}]}));
+  assert.ok(!h.get('#accBody').innerHTML.includes('<img'));
+});
+
 test('Cookie editor patches only the selected account and clears secret after saving',async()=>{
   const h=harness();setToken(h);const calls=[];
   installSnapshot(h,snapshot({accounts:[{id:'a/1',name:'Alice',userId:'user-1',hasCookie:false,enabled:true}]}));

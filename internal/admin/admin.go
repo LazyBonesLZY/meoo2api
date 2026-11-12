@@ -289,8 +289,13 @@ func (h *Handler) state(w http.ResponseWriter, r *http.Request) {
 }
 
 func keySummary(k *model.Key, now int64) map[string]any {
+	reason := k.Health.Error
+	if len(reason) > 200 {
+		reason = strings.ToValidUTF8(reason[:200], "")
+	}
 	return map[string]any{"id": k.ID, "key": maskSecret(k.Key), "enabled": k.Enabled, "health": k.Health.State,
-		"latencyMs": k.Health.LatencyMs, "cooldown": max64(0, (k.CooldownUntil-now)/1000), "stats": k.Stats}
+		"latencyMs": k.Health.LatencyMs, "cooldown": max64(0, (k.CooldownUntil-now)/1000), "stats": k.Stats,
+		"lastError": reason}
 }
 
 func (h *Handler) clientKeysLocked() []map[string]any {

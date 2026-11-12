@@ -79,7 +79,11 @@ func dataEvent(v any) string {
 
 type streamTransform func(map[string]any) map[string]any
 
-func (run *callRun) chatStream(w http.ResponseWriter, payload map[string]any, n int, transform streamTransform) {
+// chatStream forwards an upstream stream. It reports wrote=false together with
+// the error when nothing reached the client yet, which lets the caller retry the
+// same request on another account. Once headers are sent, the error is emitted
+// inside the stream and the caller only records accounting.
+func (run *callRun) chatStream(w http.ResponseWriter, payload map[string]any, n int, transform streamTransform) (bool, int64, int64, error) {
 	ctx, cancel := context.WithCancel(run.r.Context())
 	defer cancel()
 	// Ask upstream for accounting independently of the client's preference.
@@ -128,9 +132,7 @@ func (run *callRun) chatStream(w http.ResponseWriter, payload map[string]any, n 
 		}
 	}()
 	if firstErr != nil {
-		run.finish(firstErr, 0, 0)
-		respondError(w, firstErr)
-		return
+		return false, 0, 0, firstErr
 	}
 	type event struct {
 		i         int
@@ -302,5 +304,5 @@ func (run *callRun) chatStream(w http.ResponseWriter, payload map[string]any, n 
 	} else {
 		firstErr = streamWrite(w, "data: [DONE]\n\n")
 	}
-	run.finish(firstErr, pt, ct)
+	return true, pt, ct, firstErr
 }

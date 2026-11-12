@@ -122,10 +122,14 @@ $('#newApiKey').onclick=()=>busy($('#newApiKey'),async()=>{
 function keyBadge(a) {
   if(!a.enabled) return '<span class="badge">账号停用</span>';
   if(!a.key) return '<span class="badge warn">无 Key</span>';
-  if(a.key.cooldown>0) return `<span class="badge warn">冷却 ${num(a.key.cooldown)}s</span>`;
-  if(a.key.health==='ok')return `<span class="badge ok">正常 ${num(a.key.latencyMs)}ms</span>`;
-  if(a.key.health==='invalid')return '<span class="badge bad">鉴权失败</span>';
-  return '<span class="badge">'+(a.key.health==='error'?'异常':'未探测')+'</span>';
+  const why=a.key.lastError?` title="${esc(a.key.lastError)}"`:'';
+  if(a.key.cooldown>0){
+    const mins=Math.ceil(num(a.key.cooldown)/60);
+    return `<span class="badge warn"${why}>冷却 ${mins} 分钟</span>`;
+  }
+  if(a.key.health==='ok')return `<span class="badge ok"${why}>正常 ${num(a.key.latencyMs)}ms</span>`;
+  if(a.key.health==='invalid')return `<span class="badge bad"${why}>鉴权失败</span>`;
+  return `<span class="badge"${why}>`+(a.key.health==='error'?'异常':'未探测')+'</span>';
 }
 function fillUnfocused(id,value,checked=false) {
   const el=$('#'+id); if(document.activeElement===el || el.dataset.dirty==='1')return;

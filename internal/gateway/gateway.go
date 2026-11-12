@@ -366,23 +366,21 @@ func (h *Handler) chat(w http.ResponseWriter, r *http.Request) {
 	name, _ := body["model"].(string)
 	resolved := h.resolveModel(name)
 	payload := h.shape(body, resolved)
-	run := h.startRun(w, r, c, resolved)
-	if run == nil {
-		return
-	}
 	if stream, _ := payload["stream"].(bool); stream {
-		run.chatStream(w, payload, n, nil)
+		h.withFailover(w, r, c, resolved, func(run *callRun) (bool, int64, int64, error) {
+			return run.chatStream(w, payload, n, nil)
+		})
 		return
 	}
-	d, err := run.complete(payload, n)
-	if err != nil {
-		run.finish(err, 0, 0)
-		respondError(w, err)
-		return
-	}
-	pt, ct := tokens(d)
-	run.finish(nil, pt, ct)
-	writeJSON(w, 200, d)
+	h.withFailover(w, r, c, resolved, func(run *callRun) (bool, int64, int64, error) {
+		d, err := run.complete(payload, n)
+		if err != nil {
+			return false, 0, 0, err
+		}
+		pt, ct := tokens(d)
+		writeJSON(w, 200, d)
+		return true, pt, ct, nil
+	})
 }
 
 type callRun struct {
@@ -396,16 +394,16 @@ type callRun struct {
 	start  time.Time
 }
 
-func (h *Handler) startRun(w http.ResponseWriter, r *http.Request, c caller, resolved string) *callRun {
+func (h *Handler) startRun(w http.ResponseWriter, r *http.Request, c caller, resolved string, exclude map[string]bool) *callRun {
 	run := &callRun{h: h, r: r, c: c, key: c.Byok, label: c.Label, model: resolved, start: time.Now()}
 	if run.key == "" {
 		identity := ""
 		if c.ClientKey != nil {
 			identity = c.ClientKey.ID
 		}
-		run.picked = h.Picker.PickFor(identity)
+		run.picked = h.Picker.PickForExcluding(identity, exclude)
 		if run.picked == nil {
-			err := &upstream.Error{Status: 503, Type: "api_error", Code: "no_available_key", Message: "当前没有可用 key（全部禁用或在冷却中）"}
+			err := &upstream.Error{Status: 503, Type: "api_error", Code: "no_available_key", Message: "当前没有可用 key（全部禁用、冷却或余额不足）"}
 			run.finish(err, 0, 0)
 			respondError(w, err)
 			return nil
@@ -417,7 +415,6 @@ func (h *Handler) startRun(w http.ResponseWriter, r *http.Request, c caller, res
 
 func (run *callRun) finish(err error, pt, ct int64) {
 	status, msg := 200, ""
-	cooldown, soft := false, false
 	if err != nil {
 		e := asError(err)
 		status, msg = e.Status, e.Message
@@ -425,15 +422,13 @@ func (run *callRun) finish(err error, pt, ct int64) {
 			msg = strings.ReplaceAll(msg, run.key, "[redacted]")
 			e.Message = msg
 		}
-		soft = status == 429 || status >= 500
-		cooldown = soft || status == 401 || status == 403
 	}
 	cancelled := run.r.Context().Err() != nil || status == 499
 	if cancelled {
 		status = 499
 	}
-	if !cancelled && run.picked != nil {
-		run.h.Picker.RecordKey(run.picked, err == nil, cooldown, soft, pt, ct)
+	if !cancelled {
+		run.recordKey(err == nil, err, pt, ct)
 	}
 	if run.c.ClientKey != nil {
 		run.h.St.Mu.Lock()

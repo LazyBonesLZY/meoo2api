@@ -84,43 +84,41 @@ func (h *Handler) legacy(w http.ResponseWriter, r *http.Request) {
 	payload := map[string]any{"model": resolved}
 	copyFields(payload, body, "max_tokens", "max_completion_tokens", "temperature", "top_p", "stop", "presence_penalty", "frequency_penalty", "seed", "user", "stream", "stream_options", "logit_bias")
 	payload = h.shape(payload, resolved)
-	run := h.startRun(w, r, c, resolved)
-	if run == nil {
-		return
-	}
 	payload["messages"] = []any{map[string]any{"role": "user", "content": prompts[0]}}
 	if stream {
-		run.chatStream(w, payload, n, legacyChunk)
+		h.withFailover(w, r, c, resolved, func(run *callRun) (bool, int64, int64, error) {
+			return run.chatStream(w, payload, n, legacyChunk)
+		})
 		return
 	}
-	choices := []any{}
-	var pt, ct int64
-	var first map[string]any
-	for _, prompt := range prompts {
-		payload["messages"] = []any{map[string]any{"role": "user", "content": prompt}}
-		d, err := run.complete(payload, n)
-		if err != nil {
-			run.finish(err, pt, ct)
-			respondError(w, err)
-			return
+	h.withFailover(w, r, c, resolved, func(run *callRun) (bool, int64, int64, error) {
+		choices := []any{}
+		var pt, ct int64
+		var first map[string]any
+		for _, prompt := range prompts {
+			payload["messages"] = []any{map[string]any{"role": "user", "content": prompt}}
+			d, err := run.complete(payload, n)
+			if err != nil {
+				return false, pt, ct, err
+			}
+			if first == nil {
+				first = d
+			}
+			p, c := tokens(d)
+			pt += p
+			ct += c
+			for _, ch := range d["choices"].([]any) {
+				m := ch.(map[string]any)
+				message := m["message"].(map[string]any)
+				text, _ := message["content"].(string)
+				choices = append(choices, map[string]any{"text": text, "index": len(choices), "logprobs": nil, "finish_reason": m["finish_reason"]})
+			}
 		}
-		if first == nil {
-			first = d
-		}
-		p, c := tokens(d)
-		pt += p
-		ct += c
-		for _, ch := range d["choices"].([]any) {
-			m := ch.(map[string]any)
-			message := m["message"].(map[string]any)
-			text, _ := message["content"].(string)
-			choices = append(choices, map[string]any{"text": text, "index": len(choices), "logprobs": nil, "finish_reason": m["finish_reason"]})
-		}
-	}
-	run.finish(nil, pt, ct)
-	out := map[string]any{"id": first["id"], "object": "text_completion", "created": first["created"], "model": resolved, "choices": choices,
-		"usage": map[string]any{"prompt_tokens": pt, "completion_tokens": ct, "total_tokens": pt + ct}}
-	writeJSON(w, 200, out)
+		out := map[string]any{"id": first["id"], "object": "text_completion", "created": first["created"], "model": resolved, "choices": choices,
+			"usage": map[string]any{"prompt_tokens": pt, "completion_tokens": ct, "total_tokens": pt + ct}}
+		writeJSON(w, 200, out)
+		return true, pt, ct, nil
+	})
 }
 
 func legacyChunk(d map[string]any) map[string]any {
@@ -357,25 +355,23 @@ func (h *Handler) responses(w http.ResponseWriter, r *http.Request) {
 	name, _ := payload["model"].(string)
 	resolved := h.resolveModel(name)
 	payload = h.shape(payload, resolved)
-	run := h.startRun(w, r, c, resolved)
-	if run == nil {
-		return
-	}
 	if stream, _ := payload["stream"].(bool); stream {
 		payload["stream_options"] = map[string]any{"include_usage": true}
-		adapter := newResponsesStream(w, resolved)
-		run.chatStream(adapter, payload, 1, nil)
+		h.withFailover(w, r, c, resolved, func(run *callRun) (bool, int64, int64, error) {
+			adapter := newResponsesStream(w, resolved)
+			return run.chatStream(adapter, payload, 1, nil)
+		})
 		return
 	}
-	d, err := run.complete(payload, 1)
-	if err != nil {
-		run.finish(err, 0, 0)
-		respondError(w, err)
-		return
-	}
-	pt, ct := tokens(d)
-	run.finish(nil, pt, ct)
-	writeJSON(w, 200, responseObject(d, resolved, "resp_"+model.RandID("", 8)))
+	h.withFailover(w, r, c, resolved, func(run *callRun) (bool, int64, int64, error) {
+		d, err := run.complete(payload, 1)
+		if err != nil {
+			return false, 0, 0, err
+		}
+		pt, ct := tokens(d)
+		writeJSON(w, 200, responseObject(d, resolved, "resp_"+model.RandID("", 8)))
+		return true, pt, ct, nil
+	})
 }
 
 func responseObject(d map[string]any, resolved, id string) map[string]any {
